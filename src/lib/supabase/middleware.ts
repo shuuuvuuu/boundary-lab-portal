@@ -35,9 +35,17 @@ export async function updateSession(request: NextRequest) {
     pathname === "/api/healthz";
 
   if (!user && !isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    // haproxy 経由では nextUrl が内部 host (0.0.0.0:3000) を返す場合があるため、
+    // NEXT_PUBLIC_SITE_URL (ビルド時焼き込み) を基準にする。未設定時は nextUrl fallback。
+    const base = process.env.NEXT_PUBLIC_SITE_URL;
+    const target = base
+      ? new URL("/login", base)
+      : (() => {
+          const u = request.nextUrl.clone();
+          u.pathname = "/login";
+          return u;
+        })();
+    return NextResponse.redirect(target);
   }
 
   return response;
