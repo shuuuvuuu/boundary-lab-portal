@@ -89,8 +89,25 @@ export function PortalShell({ profile, email }: { profile: Profile | null; email
         </nav>
 
         <div className="border-t border-white/5 p-4">
-          <p className="truncate text-xs text-slate-400">{email}</p>
-          <div className="mt-1 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            {profile?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.avatar_url}
+                alt=""
+                className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/10"
+              />
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-primary/20 text-sm font-bold text-accent-soft ring-1 ring-white/10">
+                {displayName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white">{displayName}</p>
+              <p className="truncate text-[10px] text-slate-400">{email}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1 rounded-full bg-accent-primary/15 px-2 py-0.5 text-xs font-medium text-accent-soft">
               {planLabel}
             </span>

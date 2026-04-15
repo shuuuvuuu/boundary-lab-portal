@@ -46,6 +46,28 @@ export function PersonalTab({ profile, email }: { profile: Profile | null; email
     return error ? error.message : null;
   }
 
+  async function handleUploadAvatar(file: File): Promise<string | null> {
+    const supabase = createClient();
+    if (!profile) return "プロフィールがまだ作成されていません";
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
+    const path = `${profile.id}/avatar.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) return upErr.message;
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("avatars").getPublicUrl(path);
+    // キャッシュバスター付きで保存
+    const urlWithBust = `${publicUrl}?v=${Date.now()}`;
+    const { error: updErr } = await supabase
+      .from("profiles")
+      .update({ avatar_url: urlWithBust })
+      .eq("id", profile.id);
+    if (updErr) return updErr.message;
+    return null;
+  }
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
@@ -106,7 +128,12 @@ export function PersonalTab({ profile, email }: { profile: Profile | null; email
 
       <div className="space-y-6">
         <Card title="プロフィール" subtitle="アカウント基本情報">
-          <ProfileBlock profile={profile} email={email} onSave={handleUpdateProfile} />
+          <ProfileBlock
+            profile={profile}
+            email={email}
+            onSave={handleUpdateProfile}
+            onUploadAvatar={handleUploadAvatar}
+          />
         </Card>
       </div>
     </div>
@@ -214,13 +241,17 @@ function ProfileBlock({
   profile,
   email,
   onSave,
+  onUploadAvatar,
 }: {
   profile: Profile | null;
   email: string;
   onSave: (name: string) => Promise<string | null>;
+  onUploadAvatar: (file: File) => Promise<string | null>;
 }) {
   const [name, setName] = useState(profile?.display_name ?? "");
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   async function handleSave() {
@@ -239,8 +270,83 @@ function ProfileBlock({
     }
   }
 
+  async function handlePickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ kind: "error", text: "画像は 5MB 以下にしてください" });
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setMessage({ kind: "error", text: "画像ファイルを選んでください" });
+      return;
+    }
+    setUploading(true);
+    setMessage(null);
+    // 楽観的プレビュー
+    const localUrl = URL.createObjectURL(file);
+    setAvatarUrl(localUrl);
+    const err = await onUploadAvatar(file);
+    setUploading(false);
+    if (err) {
+      setAvatarUrl(profile?.avatar_url ?? null);
+      setMessage({ kind: "error", text: `アップロード失敗: ${err}` });
+    } else {
+      setMessage({
+        kind: "success",
+        text: `アバターを更新しました (${new Date().toLocaleTimeString("ja-JP")})`,
+      });
+      window.setTimeout(() => setMessage(null), 4000);
+    }
+  }
+
+  const initials = (profile?.display_name?.trim() || email || "?")
+    .charAt(0)
+    .toUpperCase();
+
   return (
     <div className="space-y-4 text-sm">
+      <div className="flex items-center gap-4">
+        <div className="relative h-20 w-20 shrink-0">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt="avatar"
+              className="h-20 w-20 rounded-full object-cover ring-2 ring-accent-primary/40"
+            />
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent-primary/20 text-2xl font-bold text-accent-soft ring-2 ring-accent-primary/40">
+              {initials}
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 text-xs text-white">
+              送信中…
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 transition hover:bg-white/10">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            画像を選ぶ
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={handlePickFile}
+              disabled={uploading}
+              className="hidden"
+            />
+          </label>
+          <p className="mt-1.5 text-[10px] text-slate-500">PNG / JPEG / WEBP / GIF、5MB まで</p>
+        </div>
+      </div>
+
       <Field label="Email">
         <span className="break-all text-white">{email}</span>
       </Field>
@@ -261,25 +367,26 @@ function ProfileBlock({
             {saving ? "保存中…" : "保存"}
           </button>
         </div>
-        {message && (
-          <p
-            role="status"
-            aria-live="polite"
-            className={
-              message.kind === "success"
-                ? "mt-2 text-xs text-emerald-400"
-                : "mt-2 text-xs text-red-400"
-            }
-          >
-            {message.kind === "success" ? "✓ " : "✗ "}
-            {message.text}
-          </p>
-        )}
       </Field>
 
       <Field label="プラン">
         <PlanBadge tier={profile?.plan_tier ?? "free"} />
       </Field>
+
+      {message && (
+        <p
+          role="status"
+          aria-live="polite"
+          className={
+            message.kind === "success"
+              ? "text-xs text-emerald-400"
+              : "text-xs text-red-400"
+          }
+        >
+          {message.kind === "success" ? "✓ " : "✗ "}
+          {message.text}
+        </p>
+      )}
     </div>
   );
 }

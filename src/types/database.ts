@@ -4,6 +4,7 @@ export interface Profile {
   id: string;
   email: string;
   display_name: string | null;
+  avatar_url: string | null;
   plan_tier: PlanTier;
   hubs_account_id: string | null;
   created_at: string;
