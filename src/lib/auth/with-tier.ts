@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { PlanTier } from "@/types/database";
+import { notifyDiscord } from "@/lib/alerts/discord";
 import { withAuth, type AuthedHandler, type RouteCtx } from "./with-auth";
 
 const TIER_RANK: Record<PlanTier, number> = {
@@ -21,7 +22,12 @@ export function withTier<P = Record<string, string>>(
       .single<{ plan_tier: PlanTier }>();
 
     if (error || !profile) {
-      return NextResponse.json({ error: "profile not found" }, { status: 403 });
+      // profile 行が無い = オンボーディング漏れ or DB 不整合。運用で検知したい。
+      void notifyDiscord("error", "profile row missing for authenticated user", {
+        user_id: ctx.user.id,
+        email: ctx.user.email ?? "(unknown)",
+      });
+      return NextResponse.json({ error: "profile not found" }, { status: 500 });
     }
 
     if (TIER_RANK[profile.plan_tier] < TIER_RANK[minTier]) {
