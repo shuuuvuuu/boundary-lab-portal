@@ -66,14 +66,10 @@ drop policy if exists profiles_select_self on public.profiles;
 create policy profiles_select_self on public.profiles
   for select using (auth.uid() = id);
 
+-- NOTE: 「enterprise は全ユーザーの profile を読める」ポリシーは profiles を
+-- 自己参照するため RLS 無限再帰を起こす。個別ユーザー行の横断閲覧 UI が
+-- 生えるまで削除しておく。将来必要になったら SECURITY DEFINER 関数で実装する。
 drop policy if exists profiles_select_enterprise on public.profiles;
-create policy profiles_select_enterprise on public.profiles
-  for select using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.plan_tier = 'enterprise'
-    )
-  );
 
 drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles
