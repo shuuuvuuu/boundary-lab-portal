@@ -1,13 +1,9 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth/with-auth";
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withAuth<{ id: string }>(async (_request, { user, supabase, params }) => {
+  if (!params) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { error } = await supabase
     .from("calendar_events")
@@ -17,4 +13,4 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
-}
+});
