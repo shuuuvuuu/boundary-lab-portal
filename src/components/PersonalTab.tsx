@@ -82,10 +82,78 @@ export function PersonalTab({ profile, email }: { profile: Profile | null; email
       </section>
 
       <section>
-        <h2 className="mb-3 text-base font-bold">Hubs アカウント情報 / 入室履歴</h2>
-        <p className="text-sm text-neutral-500">Phase 2 で Reticulum API と連携予定。</p>
+        <h2 className="mb-3 text-base font-bold">Hubs アカウント情報</h2>
+        <HubsAccountBlock />
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-bold">入室履歴</h2>
+        <p className="border border-dashed border-black bg-neutral-50 px-3 py-2 text-xs">
+          Reticulum は入室履歴を永続化しないため、WS サイドカー導入後に対応予定。
+        </p>
       </section>
     </div>
+  );
+}
+
+type HubsMeResponse = {
+  configured: boolean;
+  message?: string;
+  account: {
+    account_id: number;
+    email: string;
+    display_name: string | null;
+    identity_name: string | null;
+    created_at: string;
+  } | null;
+};
+
+function HubsAccountBlock() {
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  const [data, setData] = useState<HubsMeResponse | null>(null);
+
+  useEffect(() => {
+    fetch("/api/hubs/me")
+      .then(async (r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        setData((await r.json()) as HubsMeResponse);
+        setState("loaded");
+      })
+      .catch(() => setState("error"));
+  }, []);
+
+  if (state === "loading") {
+    return <p className="text-sm text-neutral-500">読み込み中…</p>;
+  }
+  if (state === "error" || !data) {
+    return <p className="text-sm text-red-600">Hubs 情報の取得に失敗しました。</p>;
+  }
+  if (!data.configured) {
+    return (
+      <p className="text-sm text-neutral-500">
+        Reticulum DB 未接続（{data.message ?? "管理者に問い合わせてください"}）。
+      </p>
+    );
+  }
+  if (!data.account) {
+    return (
+      <p className="text-sm text-neutral-500">
+        {data.message ?? "Hubs アカウントが見つかりません"}。Hubs で同じメールアドレスでログイン後、
+        このページを再読み込みしてください。
+      </p>
+    );
+  }
+
+  const a = data.account;
+  return (
+    <dl className="grid grid-cols-[120px_1fr] gap-y-2 text-sm">
+      <dt className="text-neutral-600">Hubs Account ID</dt>
+      <dd>{a.account_id}</dd>
+      <dt className="text-neutral-600">Identity</dt>
+      <dd>{a.identity_name ?? "（未設定）"}</dd>
+      <dt className="text-neutral-600">登録日</dt>
+      <dd>{new Date(a.created_at).toLocaleDateString("ja-JP")}</dd>
+    </dl>
   );
 }
 
