@@ -36,10 +36,14 @@ export function PersonalTab({ profile, email }: { profile: Profile | null; email
     if (res.ok) await load();
   }
 
-  async function handleUpdateProfile(display_name: string) {
+  async function handleUpdateProfile(display_name: string): Promise<string | null> {
     const supabase = createClient();
-    if (!profile) return;
-    await supabase.from("profiles").update({ display_name }).eq("id", profile.id);
+    if (!profile) return "プロフィールがまだ作成されていません";
+    const { error } = await supabase
+      .from("profiles")
+      .update({ display_name })
+      .eq("id", profile.id);
+    return error ? error.message : null;
   }
 
   return (
@@ -164,15 +168,23 @@ function ProfileBlock({
 }: {
   profile: Profile | null;
   email: string;
-  onSave: (name: string) => Promise<void>;
+  onSave: (name: string) => Promise<string | null>;
 }) {
   const [name, setName] = useState(profile?.display_name ?? "");
   const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   async function handleSave() {
     setSaving(true);
-    await onSave(name);
+    setMessage(null);
+    const err = await onSave(name);
     setSaving(false);
+    if (err) {
+      setMessage({ kind: "error", text: `保存に失敗しました: ${err}` });
+    } else {
+      setMessage({ kind: "success", text: `保存しました (${new Date().toLocaleTimeString("ja-JP")})` });
+      window.setTimeout(() => setMessage(null), 4000);
+    }
   }
 
   return (
@@ -180,16 +192,26 @@ function ProfileBlock({
       <dt className="text-neutral-600">Email</dt>
       <dd>{email}</dd>
       <dt className="text-neutral-600">表示名</dt>
-      <dd className="flex gap-2">
+      <dd className="flex flex-wrap items-center gap-2">
         <input
           className="border border-black px-2 py-1"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="未設定"
         />
-        <button onClick={handleSave} disabled={saving} className="bg-black px-3 text-white">
-          保存
+        <button onClick={handleSave} disabled={saving} className="bg-black px-3 py-1 text-white disabled:opacity-50">
+          {saving ? "保存中…" : "保存"}
         </button>
+        {message && (
+          <span
+            role="status"
+            aria-live="polite"
+            className={message.kind === "success" ? "text-green-700 text-xs" : "text-red-600 text-xs"}
+          >
+            {message.kind === "success" ? "✓ " : "✗ "}
+            {message.text}
+          </span>
+        )}
       </dd>
       <dt className="text-neutral-600">プラン</dt>
       <dd>{profile?.plan_tier ?? "free"}</dd>
