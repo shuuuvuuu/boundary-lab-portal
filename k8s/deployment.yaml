@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: portal
-  namespace: portal
+  namespace: hcce
   labels:
     app: portal
 spec:
@@ -63,7 +63,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: portal
-  namespace: portal
+  namespace: hcce
   labels:
     app: portal
 spec:
