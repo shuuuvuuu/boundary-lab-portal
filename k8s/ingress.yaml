@@ -1,0 +1,29 @@
+# portal.boundarylabo.com を portal Service に TLS 終端でルーティングする Ingress。
+# 既存 hcce クラスタの ingress-nginx controller を使用する前提。
+# TLS 証明書 (cert-portal.boundarylabo.com) は certbotbot で事前発行すること。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portal-tls
+  namespace: portal
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - portal.boundarylabo.com
+      secretName: cert-portal.boundarylabo.com
+  rules:
+    - host: portal.boundarylabo.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: portal
+                port:
+                  number: 80
