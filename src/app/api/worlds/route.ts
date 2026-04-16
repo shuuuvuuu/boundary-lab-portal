@@ -71,8 +71,12 @@ export const GET = withRateLimit(
       summarizeWorldRow(row, user.id),
     );
     const filteredWorlds = worlds.filter((world) => {
-      if (recommendedOnly && world.recommendation_count < 1) {
-        return false;
+      if (recommendedOnly) {
+        const isPublic = world.recommendation_count >= 1;
+        const isOwn = world.added_by === user.id;
+        if (!isPublic && !isOwn) {
+          return false;
+        }
       }
 
       if (favorited && !world.current_user_favorite) {

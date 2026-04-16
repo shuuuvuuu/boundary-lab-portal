@@ -224,23 +224,79 @@ export function DiscoverTab() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleWorlds.map((world) => (
-            <WorldCard
-              key={world.id}
-              world={world}
-              actions={
-                <a
-                  href={world.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 transition hover:bg-white/10"
-                >
-                  開く
-                </a>
-              }
-            />
+            <DiscoverCard key={world.id} world={world} onChanged={refreshRecommendedWorlds} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function DiscoverCard({
+  world,
+  onChanged,
+}: {
+  world: WorldSummary;
+  onChanged: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const isOwn = world.is_own;
+  const isPublished = world.recommendation_count >= 1;
+  const isPublic =
+    isPublished ||
+    (isOwn && world.current_user_favorite?.is_recommended === true);
+
+  async function togglePublish() {
+    setBusy(true);
+    const nextRecommended = !(world.current_user_favorite?.is_recommended === true);
+    await fetch(`/api/worlds/${world.id}/favorite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        note: world.current_user_favorite?.note ?? null,
+        is_recommended: nextRecommended,
+      }),
+    });
+    await onChanged();
+    setBusy(false);
+  }
+
+  return (
+    <div className="relative">
+      {isOwn && !isPublic ? (
+        <span className="absolute right-3 top-3 z-10 rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-200">
+          非公開（自分のみ表示）
+        </span>
+      ) : null}
+      <WorldCard
+        world={world}
+        actions={
+          <div className="flex flex-col gap-2">
+            {isOwn ? (
+              <button
+                type="button"
+                onClick={togglePublish}
+                disabled={busy}
+                className={
+                  isPublic
+                    ? "rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 transition hover:bg-amber-500/20 disabled:opacity-50"
+                    : "rounded-xl border border-cyan-500/30 bg-cyan-500/20 px-3 py-2 text-xs text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-50"
+                }
+              >
+                {busy ? "更新中…" : isPublic ? "非公開に戻す" : "公開する"}
+              </button>
+            ) : null}
+            <a
+              href={world.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-center text-xs text-slate-200 transition hover:bg-white/10"
+            >
+              開く
+            </a>
+          </div>
+        }
+      />
     </div>
   );
 }

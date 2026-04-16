@@ -43,4 +43,5 @@ export interface WorldSummary extends World {
   recommendation_count: number;
   current_user_favorite: UserFavoriteWorld | null;
   current_user_review: WorldReview | null;
+  is_own: boolean;
 }

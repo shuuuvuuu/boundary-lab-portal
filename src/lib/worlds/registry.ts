@@ -60,5 +60,6 @@ export function summarizeWorldRow(row: WorldRow, userId: string): WorldSummary {
     recommendation_count: favorites.filter((favorite) => favorite.is_recommended).length,
     current_user_favorite: favorites.find((favorite) => favorite.user_id === userId) ?? null,
     current_user_review: reviews.find((review) => review.user_id === userId) ?? null,
+    is_own: row.added_by === userId,
   };
 }
