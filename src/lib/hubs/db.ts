@@ -45,6 +45,14 @@ const LOOKUP_BY_EMAIL_SQL = `
   LIMIT 1
 `;
 
+const LOOKUP_HUB_NAMES_SQL = `
+  SELECT
+    hub_sid,
+    name
+  FROM hubs
+  WHERE hub_sid = ANY($1::text[])
+`;
+
 export async function lookupAccountByEmail(email: string): Promise<HubsAccount | null> {
   const pool = getPool();
   if (!pool) return null;
@@ -71,4 +79,20 @@ export async function lookupAccountByEmail(email: string): Promise<HubsAccount |
 
 export function isReticulumDbConfigured(): boolean {
   return Boolean(connectionString);
+}
+
+export async function lookupHubNames(hubIds: string[]): Promise<Record<string, string>> {
+  const pool = getPool();
+  if (!pool) return {};
+
+  const ids = [...new Set(hubIds.map((value) => value.trim()).filter(Boolean))];
+  if (ids.length === 0) return {};
+
+  const res = await pool.query<{ hub_sid: string; name: string | null }>(LOOKUP_HUB_NAMES_SQL, [ids]);
+
+  return Object.fromEntries(
+    res.rows
+      .map((row) => [row.hub_sid, row.name?.trim() ?? ""] as const)
+      .filter((entry) => entry[1].length > 0),
+  );
 }
