@@ -2,7 +2,7 @@ export type PlanTier = "free" | "standard" | "professional" | "enterprise";
 
 export interface Profile {
   id: string;
-  email: string;
+  email: string | null;
   display_name: string | null;
   avatar_url: string | null;
   plan_tier: PlanTier;

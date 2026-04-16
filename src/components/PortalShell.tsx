@@ -14,9 +14,17 @@ type TabDef = {
   icon: React.ReactNode;
 };
 
-export function PortalShell({ profile, email }: { profile: Profile | null; email: string }) {
+export function PortalShell({
+  profile,
+  email,
+  canAccessAdmin,
+}: {
+  profile: Profile | null;
+  email: string;
+  canAccessAdmin: boolean;
+}) {
   const [tab, setTab] = useState<TabKey>("personal");
-  const isEnterprise = profile?.plan_tier === "enterprise";
+  const isEnterprise = profile?.plan_tier === "enterprise" && canAccessAdmin;
 
   const tabs: TabDef[] = [
     {
@@ -38,7 +46,7 @@ export function PortalShell({ profile, email }: { profile: Profile | null; email
   ];
 
   const active = tabs.find((t) => t.key === tab) ?? tabs[0];
-  const displayName = profile?.display_name?.trim() || email.split("@")[0];
+  const displayName = profile?.display_name?.trim() || email.split("@")[0] || "Guest";
   const planLabel = profile?.plan_tier ?? "free";
 
   return (
@@ -176,6 +184,11 @@ export function PortalShell({ profile, email }: { profile: Profile | null; email
         {/* Tab content */}
         <main className="flex-1 px-4 py-6 md:px-10 md:py-8">
           <div className="mx-auto max-w-5xl">
+            {profile?.plan_tier === "enterprise" && !canAccessAdmin ? (
+              <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                運営タブは確認済みメールアドレスの連携後に利用できます。
+              </div>
+            ) : null}
             {tab === "personal" && <PersonalTab profile={profile} email={email} />}
             {tab === "admin" && isEnterprise && <AdminTab />}
           </div>

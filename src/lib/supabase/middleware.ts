@@ -37,6 +37,7 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isAuthRoute) {
     // haproxy 経由では nextUrl が内部 host (0.0.0.0:3000) を返す場合があるため、
     // NEXT_PUBLIC_SITE_URL (ビルド時焼き込み) を基準にする。未設定時は nextUrl fallback。
+    const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     const base = process.env.NEXT_PUBLIC_SITE_URL;
     const target = base
       ? new URL("/login", base)
@@ -45,6 +46,7 @@ export async function updateSession(request: NextRequest) {
           u.pathname = "/login";
           return u;
         })();
+    target.searchParams.set("next", next);
     return NextResponse.redirect(target);
   }
 

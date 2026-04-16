@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getPreferredEmail, hasVerifiedEmailIdentity } from "@/lib/auth/user-state";
 import type { Profile } from "@/types/database";
 import { PortalShell } from "@/components/PortalShell";
 
@@ -18,5 +19,11 @@ export default async function Home() {
     .eq("id", user.id)
     .single<Profile>();
 
-  return <PortalShell profile={profile} email={user.email ?? ""} />;
+  return (
+    <PortalShell
+      profile={profile}
+      email={getPreferredEmail(user, profile) ?? ""}
+      canAccessAdmin={hasVerifiedEmailIdentity(user)}
+    />
+  );
 }

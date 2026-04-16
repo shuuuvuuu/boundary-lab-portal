@@ -23,7 +23,16 @@ export const GET = withRateLimit(
       );
     }
 
-    const email = user.email;
+    const email =
+      user.email ??
+      (
+        await supabase
+          .from("profiles")
+          .select("email")
+          .eq("id", user.id)
+          .maybeSingle<{ email: string | null }>()
+      ).data?.email ??
+      null;
     if (!email) {
       return NextResponse.json(
         { configured: true, account: null, message: "Supabase user email missing" },

@@ -295,6 +295,9 @@ function getCurrentMonth(): string {
 function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return "認証済みセッションが必要です。";
+    if (error.status === 403 && error.messageText === "verified email required") {
+      return "運営タブは確認済みメールアドレスの連携後に利用できます。";
+    }
     if (error.status === 403) return "enterprise プランのみ利用できます。";
     if (error.status === 400 && error.messageText) return `不正なリクエストです: ${error.messageText}`;
   }
