@@ -1,6 +1,13 @@
-import type { UserFavoriteWorld, World, WorldReview, WorldSummary } from "@/types/worlds";
+import type {
+  UserFavoriteWorld,
+  World,
+  WorldAddedByProfile,
+  WorldReview,
+  WorldSummary,
+} from "@/types/worlds";
 
-type WorldRow = World & {
+type WorldRow = Omit<World, "added_by_profile"> & {
+  added_by_profile?: WorldAddedByProfile | WorldAddedByProfile[] | null;
   user_favorite_worlds?: UserFavoriteWorld[] | null;
   world_reviews?: WorldReview[] | null;
 };
@@ -31,6 +38,9 @@ export function summarizeWorldRow(row: WorldRow, userId: string): WorldSummary {
   const favorites = row.user_favorite_worlds ?? [];
   const reviews = row.world_reviews ?? [];
   const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+  const addedByProfile = Array.isArray(row.added_by_profile)
+    ? row.added_by_profile[0] ?? null
+    : row.added_by_profile ?? null;
 
   return {
     id: row.id,
@@ -42,6 +52,7 @@ export function summarizeWorldRow(row: WorldRow, userId: string): WorldSummary {
     thumbnail_url: row.thumbnail_url,
     tags: row.tags,
     added_by: row.added_by,
+    added_by_profile: addedByProfile,
     created_at: row.created_at,
     updated_at: row.updated_at,
     average_rating: reviews.length ? Number((totalRating / reviews.length).toFixed(1)) : null,

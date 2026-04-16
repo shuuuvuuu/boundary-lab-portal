@@ -1,4 +1,5 @@
 import { getPreferredEmail, hasVerifiedEmailIdentity } from "@/lib/auth/user-state";
+import { getCurrentProfile } from "@/lib/profiles/current-profile";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/types/database";
 
@@ -12,11 +13,13 @@ export async function loadPortalShellData() {
     return null;
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single<Profile>();
+  let profile: Profile | null = null;
+
+  try {
+    profile = await getCurrentProfile(supabase);
+  } catch {
+    profile = null;
+  }
 
   return {
     profile,

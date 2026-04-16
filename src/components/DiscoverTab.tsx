@@ -3,13 +3,38 @@
 import { useEffect, useState } from "react";
 import { TagFilter } from "@/components/world/TagFilter";
 import { WorldCard } from "@/components/world/WorldCard";
+import { WorldForm, type WorldFormValues } from "@/components/world/WorldForm";
 import { PLATFORM_LABELS, PLATFORM_OPTIONS } from "@/lib/worlds/platforms";
 import type { Platform, WorldSummary } from "@/types/worlds";
+
+type Message = {
+  kind: "success" | "error";
+  text: string;
+};
 
 function collectTags(worlds: WorldSummary[]) {
   return Array.from(new Set(worlds.flatMap((world) => world.tags))).sort((a, b) =>
     a.localeCompare(b, "ja"),
   );
+}
+
+async function parseErrorMessage(response: Response) {
+  try {
+    const data = (await response.json()) as { error?: string };
+    return data.error ?? `request failed (${response.status})`;
+  } catch {
+    return `request failed (${response.status})`;
+  }
+}
+
+async function fetchRecommendedWorlds() {
+  const response = await fetch("/api/worlds?recommended_only=true", { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  return (await response.json()) as WorldSummary[];
 }
 
 export function DiscoverTab() {
@@ -19,21 +44,68 @@ export function DiscoverTab() {
   const [platform, setPlatform] = useState<"all" | Platform>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [message, setMessage] = useState<Message | null>(null);
+  const [addRecommended, setAddRecommended] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    fetch("/api/worlds?recommended_only=true", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) {
-          const payload = (await response.json()) as { error?: string };
-          throw new Error(payload.error ?? String(response.status));
-        }
-        setWorlds((await response.json()) as WorldSummary[]);
+    fetchRecommendedWorlds()
+      .then((data) => {
+        setWorlds(data);
         setError(null);
       })
       .catch((nextError: Error) => setError(nextError.message))
       .finally(() => setLoading(false));
   }, []);
+
+  async function refreshRecommendedWorlds() {
+    try {
+      const data = await fetchRecommendedWorlds();
+      setWorlds(data);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "読み込みに失敗しました。");
+    }
+  }
+
+  async function handleAddWorld(values: WorldFormValues) {
+    setMessage(null);
+
+    const createResponse = await fetch("/api/worlds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+
+    if (!createResponse.ok) {
+      return parseErrorMessage(createResponse);
+    }
+
+    const world = (await createResponse.json()) as { id: string };
+    const favoriteResponse = await fetch(`/api/worlds/${world.id}/favorite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        is_recommended: addRecommended,
+      }),
+    });
+
+    if (!favoriteResponse.ok) {
+      return parseErrorMessage(favoriteResponse);
+    }
+
+    setAddRecommended(false);
+    setShowForm(false);
+    setMessage({
+      kind: "success",
+      text: addRecommended
+        ? "ワールドを登録しておすすめに公開しました。"
+        : "ワールドを登録してお気に入りに追加しました。",
+    });
+    await refreshRecommendedWorlds();
+    return null;
+  }
 
   const platformWorlds =
     platform === "all" ? worlds : worlds.filter((world) => world.platform === platform);
@@ -58,6 +130,45 @@ export function DiscoverTab() {
           <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">
             表示中 {visibleWorlds.length} / 総数 {worlds.length}
           </div>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-300">
+              気に入ったワールドを新規登録し、必要なら Discover におすすめ公開できます。
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowForm((current) => !current)}
+              className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/20"
+            >
+              {showForm ? "フォームを閉じる" : "+ ワールドを追加"}
+            </button>
+          </div>
+
+          {showForm ? (
+            <WorldForm onSubmit={handleAddWorld} submitLabel="登録して保存">
+              <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/10 p-3 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={addRecommended}
+                  onChange={(event) => setAddRecommended(event.target.checked)}
+                  className="h-4 w-4 rounded border-white/20 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+                />
+                おすすめとして公開する
+              </label>
+            </WorldForm>
+          ) : null}
+
+          {message ? (
+            <p
+              className={
+                message.kind === "success" ? "text-sm text-emerald-300" : "text-sm text-rose-300"
+              }
+            >
+              {message.text}
+            </p>
+          ) : null}
         </div>
       </section>
 

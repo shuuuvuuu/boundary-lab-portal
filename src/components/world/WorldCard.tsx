@@ -1,5 +1,5 @@
 import { PLATFORM_BADGE_CLASSNAMES, PLATFORM_LABELS } from "@/lib/worlds/platforms";
-import type { Platform, WorldSummary } from "@/types/worlds";
+import type { Platform, WorldAddedByProfile, WorldSummary } from "@/types/worlds";
 import { StarRating } from "./StarRating";
 
 type CardWorld = {
@@ -10,6 +10,7 @@ type CardWorld = {
   thumbnail_url: string | null;
   tags: string[];
   platform: Platform;
+  added_by_profile?: WorldAddedByProfile | null;
   average_rating?: number | null;
   review_count?: number;
   recommendation_count?: number;
@@ -29,6 +30,7 @@ export function WorldCard({
   const reviewCount = typeof world.review_count === "number" ? world.review_count : 0;
   const recommendationCount =
     typeof world.recommendation_count === "number" ? world.recommendation_count : 0;
+  const addedByName = world.added_by_profile?.display_name?.trim() || "匿名";
 
   return (
     <article className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/50 shadow-card">
@@ -107,9 +109,23 @@ export function WorldCard({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-          <span>レビュー {reviewCount} 件</span>
-          <span>おすすめ {recommendationCount} 件</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            {world.added_by_profile?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={world.added_by_profile.avatar_url}
+                alt={`${addedByName} avatar`}
+                className="h-6 w-6 rounded-full object-cover"
+              />
+            ) : null}
+            <span>登録者 by {addedByName}</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span>レビュー {reviewCount} 件</span>
+            <span>おすすめ {recommendationCount} 件</span>
+          </div>
         </div>
 
         {footer ? <div className="border-t border-white/5 pt-4">{footer}</div> : null}

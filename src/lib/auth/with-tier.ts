@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { PlanTier } from "@/types/database";
 import { notifyDiscord } from "@/lib/alerts/discord";
+import { getCurrentProfile } from "@/lib/profiles/current-profile";
 import { hasVerifiedEmailIdentity } from "./user-state";
 import { withAuth, type AuthedHandler, type RouteCtx } from "./with-auth";
 
@@ -20,13 +21,14 @@ export function withTier<P = Record<string, string>>(
       return NextResponse.json({ error: "verified email required" }, { status: 403 });
     }
 
-    const { data: profile, error } = await ctx.supabase
-      .from("profiles")
-      .select("plan_tier")
-      .eq("id", ctx.user.id)
-      .single<{ plan_tier: PlanTier }>();
+    let profile = null;
+    try {
+      profile = await getCurrentProfile(ctx.supabase);
+    } catch {
+      profile = null;
+    }
 
-    if (error || !profile) {
+    if (!profile) {
       // profile 行が無い = オンボーディング漏れ or DB 不整合。運用で検知したい。
       void notifyDiscord("error", "profile row missing for authenticated user", {
         user_id: ctx.user.id,

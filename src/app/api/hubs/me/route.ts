@@ -3,6 +3,7 @@ import { withAuth } from "@/lib/auth/with-auth";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 import { isReticulumDbConfigured, lookupAccountByEmail } from "@/lib/hubs/db";
 import { notifyDiscord } from "@/lib/alerts/discord";
+import { getCurrentProfile } from "@/lib/profiles/current-profile";
 
 function classifyPgError(err: { code?: string; message?: string }): string {
   const code = err.code ?? "";
@@ -23,16 +24,16 @@ export const GET = withRateLimit(
       );
     }
 
-    const email =
-      user.email ??
-      (
-        await supabase
-          .from("profiles")
-          .select("email")
-          .eq("id", user.id)
-          .maybeSingle<{ email: string | null }>()
-      ).data?.email ??
-      null;
+    let profileEmail: string | null = null;
+    if (!user.email) {
+      try {
+        profileEmail = (await getCurrentProfile(supabase))?.email ?? null;
+      } catch {
+        profileEmail = null;
+      }
+    }
+
+    const email = user.email ?? profileEmail ?? null;
     if (!email) {
       return NextResponse.json(
         { configured: true, account: null, message: "Supabase user email missing" },

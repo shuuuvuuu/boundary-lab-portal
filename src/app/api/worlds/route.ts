@@ -8,9 +8,15 @@ import {
   normalizeTags,
   summarizeWorldRow,
 } from "@/lib/worlds/registry";
-import type { World, WorldReview, UserFavoriteWorld } from "@/types/worlds";
+import type {
+  UserFavoriteWorld,
+  World,
+  WorldAddedByProfile,
+  WorldReview,
+} from "@/types/worlds";
 
-type WorldSelectRow = World & {
+type WorldSelectRow = Omit<World, "added_by_profile"> & {
+  added_by_profile?: WorldAddedByProfile | WorldAddedByProfile[] | null;
   user_favorite_worlds?: UserFavoriteWorld[] | null;
   world_reviews?: WorldReview[] | null;
 };
@@ -25,6 +31,7 @@ const WORLD_SELECT = `
   thumbnail_url,
   tags,
   added_by,
+  added_by_profile:profiles!worlds_added_by_fkey(display_name, avatar_url),
   created_at,
   updated_at,
   user_favorite_worlds(user_id, world_id, note, is_recommended, created_at),

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { needsEmailOnboarding } from "@/lib/auth/user-state";
+import { getCurrentProfile } from "@/lib/profiles/current-profile";
 import type { Profile } from "@/types/database";
 
 export async function GET(request: NextRequest) {
@@ -47,11 +48,19 @@ export async function GET(request: NextRequest) {
     return redirectWithCookies(cookiesToSet, `${base}/login?error=auth_callback_failed`);
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id,email")
-    .eq("id", user.id)
-    .maybeSingle<Pick<Profile, "id" | "email">>();
+  let profile: Pick<Profile, "id" | "email"> | null = null;
+
+  try {
+    const currentProfile = await getCurrentProfile(supabase);
+    profile = currentProfile
+      ? {
+          id: currentProfile.id,
+          email: currentProfile.email,
+        }
+      : null;
+  } catch {
+    return redirectWithCookies(cookiesToSet, `${base}/login?error=profile_sync_failed`);
+  }
 
   if (!profile) {
     const { error: insertError } = await supabase.from("profiles").insert({

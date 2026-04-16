@@ -1,5 +1,10 @@
 export type Platform = "hubs" | "vrchat" | "spatial" | "other";
 
+export interface WorldAddedByProfile {
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
 export interface World {
   id: string;
   platform: Platform;
@@ -10,6 +15,7 @@ export interface World {
   thumbnail_url: string | null;
   tags: string[];
   added_by: string | null;
+  added_by_profile: WorldAddedByProfile | null;
   created_at: string;
   updated_at: string;
 }
