@@ -61,7 +61,12 @@ function LoginContent() {
     }
   }
 
-  const callbackError = getCallbackErrorMessage(searchParams.get("error"));
+  const callbackError = getCallbackErrorMessage(
+    searchParams.get("error"),
+    searchParams.get("oauth_error"),
+    searchParams.get("oauth_error_code"),
+    searchParams.get("oauth_error_description"),
+  );
 
   return (
     <LoginShell>
@@ -161,7 +166,12 @@ function sanitizeNext(value: string | null): string {
   return value;
 }
 
-function getCallbackErrorMessage(code: string | null): string | null {
+function getCallbackErrorMessage(
+  code: string | null,
+  oauthError?: string | null,
+  oauthErrorCode?: string | null,
+  oauthErrorDescription?: string | null,
+): string | null {
   switch (code) {
     case "no_code":
       return "認証コードが見つかりませんでした。もう一度ログインしてください。";
@@ -169,6 +179,14 @@ function getCallbackErrorMessage(code: string | null): string | null {
       return "認証コールバックの処理に失敗しました。もう一度お試しください。";
     case "profile_sync_failed":
       return "プロフィールの同期に失敗しました。時間をおいて再度お試しください。";
+    case "oauth_error": {
+      const parts = [
+        oauthError ? `エラー: ${oauthError}` : null,
+        oauthErrorCode ? `コード: ${oauthErrorCode}` : null,
+        oauthErrorDescription ? `詳細: ${oauthErrorDescription}` : null,
+      ].filter(Boolean);
+      return `OAuth プロバイダからエラーが返されました。${parts.length ? ` (${parts.join(" / ")})` : ""}`;
+    }
     default:
       return null;
   }

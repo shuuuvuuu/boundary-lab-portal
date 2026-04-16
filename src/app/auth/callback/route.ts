@@ -8,11 +8,21 @@ import type { Profile } from "@/types/database";
 export async function GET(request: NextRequest) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
   const code = searchParams.get("code");
+  const oauthError = searchParams.get("error");
+  const oauthErrorCode = searchParams.get("error_code");
+  const oauthErrorDescription = searchParams.get("error_description");
   const next = sanitizeNext(searchParams.get("next"));
 
   // haproxy 経由では request.url が 0.0.0.0:3000 を返す場合があるため、
   // NEXT_PUBLIC_SITE_URL (ビルド時焼き込み) を優先する。
   const base = process.env.NEXT_PUBLIC_SITE_URL || requestOrigin;
+
+  if (oauthError) {
+    const params = new URLSearchParams({ error: "oauth_error", oauth_error: oauthError });
+    if (oauthErrorCode) params.set("oauth_error_code", oauthErrorCode);
+    if (oauthErrorDescription) params.set("oauth_error_description", oauthErrorDescription);
+    return NextResponse.redirect(`${base}/login?${params.toString()}`);
+  }
 
   if (!code) {
     return NextResponse.redirect(`${base}/login?error=no_code`);
