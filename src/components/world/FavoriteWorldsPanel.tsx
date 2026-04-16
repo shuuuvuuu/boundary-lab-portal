@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { WorldSummary } from "@/types/worlds";
+import { ReviewsModal } from "./ReviewsModal";
 import { StarRating } from "./StarRating";
 import { WorldCard } from "./WorldCard";
 import { WorldForm, type WorldFormValues } from "./WorldForm";
@@ -29,6 +30,7 @@ export function FavoriteWorldsPanel() {
   const [addRecommended, setAddRecommended] = useState(false);
   const [addRating, setAddRating] = useState(0);
   const [addReviewBody, setAddReviewBody] = useState("");
+  const [reviewingWorld, setReviewingWorld] = useState<WorldSummary | null>(null);
 
   async function loadFavorites() {
     setLoading(true);
@@ -180,10 +182,23 @@ export function FavoriteWorldsPanel() {
       ) : (
         <div className="space-y-4">
           {worlds.map((world) => (
-            <FavoriteWorldItem key={world.id} world={world} onRefresh={loadFavorites} />
+            <FavoriteWorldItem
+              key={world.id}
+              world={world}
+              onRefresh={loadFavorites}
+              onOpenReviews={() => setReviewingWorld(world)}
+            />
           ))}
         </div>
       )}
+
+      {reviewingWorld ? (
+        <ReviewsModal
+          worldId={reviewingWorld.id}
+          worldName={reviewingWorld.name}
+          onClose={() => setReviewingWorld(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -191,9 +206,11 @@ export function FavoriteWorldsPanel() {
 function FavoriteWorldItem({
   world,
   onRefresh,
+  onOpenReviews,
 }: {
   world: WorldSummary;
   onRefresh: () => Promise<void>;
+  onOpenReviews: () => void;
 }) {
   const [note, setNote] = useState(world.current_user_favorite?.note ?? "");
   const [isRecommended, setIsRecommended] = useState(
@@ -276,6 +293,7 @@ function FavoriteWorldItem({
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
       <WorldCard
         world={world}
+        onOpenReviews={onOpenReviews}
         actions={
           <a
             href={world.url}

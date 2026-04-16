@@ -6,19 +6,15 @@ import { isPlatform } from "@/lib/worlds/platforms";
 import {
   normalizeNullableText,
   normalizeTags,
+  type WorldReviewRow,
   summarizeWorldRow,
 } from "@/lib/worlds/registry";
-import type {
-  UserFavoriteWorld,
-  World,
-  WorldAddedByProfile,
-  WorldReview,
-} from "@/types/worlds";
+import type { UserFavoriteWorld, World, WorldAddedByProfile } from "@/types/worlds";
 
 type WorldSelectRow = Omit<World, "added_by_profile"> & {
   added_by_profile?: WorldAddedByProfile | WorldAddedByProfile[] | null;
   user_favorite_worlds?: UserFavoriteWorld[] | null;
-  world_reviews?: WorldReview[] | null;
+  world_reviews?: WorldReviewRow[] | null;
 };
 
 const WORLD_SELECT = `
@@ -35,7 +31,15 @@ const WORLD_SELECT = `
   created_at,
   updated_at,
   user_favorite_worlds(user_id, world_id, note, is_recommended, created_at),
-  world_reviews(id, world_id, user_id, rating, body, created_at)
+  world_reviews(
+    id,
+    world_id,
+    user_id,
+    rating,
+    body,
+    created_at,
+    profile:profiles!world_reviews_user_id_fkey(display_name, avatar_url)
+  )
 `;
 
 export const GET = withRateLimit(
@@ -67,9 +71,7 @@ export const GET = withRateLimit(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const worlds = ((data ?? []) as WorldSelectRow[]).map((row) =>
-      summarizeWorldRow(row, user.id),
-    );
+    const worlds = ((data ?? []) as WorldSelectRow[]).map((row) => summarizeWorldRow(row, user.id));
     const filteredWorlds = worlds.filter((world) => {
       if (recommendedOnly) {
         const isPublic = world.recommendation_count >= 1;

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ReviewsModal } from "@/components/world/ReviewsModal";
 import { TagFilter } from "@/components/world/TagFilter";
 import { WorldCard } from "@/components/world/WorldCard";
+import { WorldEditModal } from "@/components/world/WorldEditModal";
 import { WorldForm, type WorldFormValues } from "@/components/world/WorldForm";
 import { PLATFORM_LABELS, PLATFORM_OPTIONS } from "@/lib/worlds/platforms";
 import type { Platform, WorldSummary } from "@/types/worlds";
@@ -37,7 +39,7 @@ async function fetchRecommendedWorlds() {
   return (await response.json()) as WorldSummary[];
 }
 
-export function DiscoverTab() {
+export function DiscoverTab({ canDeleteWorlds = false }: { canDeleteWorlds?: boolean }) {
   const [worlds, setWorlds] = useState<WorldSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,8 @@ export function DiscoverTab() {
   const [tagQuery, setTagQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
-  const [addRecommended, setAddRecommended] = useState(false);
+  const [editingWorld, setEditingWorld] = useState<WorldSummary | null>(null);
+  const [reviewingWorld, setReviewingWorld] = useState<WorldSummary | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -87,7 +90,7 @@ export function DiscoverTab() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        is_recommended: addRecommended,
+        is_recommended: true,
       }),
     });
 
@@ -95,13 +98,10 @@ export function DiscoverTab() {
       return parseErrorMessage(favoriteResponse);
     }
 
-    setAddRecommended(false);
     setShowForm(false);
     setMessage({
       kind: "success",
-      text: addRecommended
-        ? "ワールドを登録しておすすめに公開しました。"
-        : "ワールドを登録してお気に入りに追加しました。",
+      text: "ワールドを登録して Discover に公開しました。",
     });
     await refreshRecommendedWorlds();
     return null;
@@ -124,7 +124,8 @@ export function DiscoverTab() {
               クロスプラットフォームのおすすめワールド
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-              Hubs Foundation / VRChat / Spatial を横断して、公開おすすめ済みのワールドだけを一覧します。
+              Hubs Foundation / VRChat / Spatial
+              を横断して、公開おすすめ済みのワールドだけを一覧します。
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">
@@ -135,7 +136,7 @@ export function DiscoverTab() {
         <div className="mt-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-slate-300">
-              気に入ったワールドを新規登録し、必要なら Discover におすすめ公開できます。
+              気に入ったワールドを登録すると、Discover に即時公開されます。
             </p>
             <button
               type="button"
@@ -146,19 +147,7 @@ export function DiscoverTab() {
             </button>
           </div>
 
-          {showForm ? (
-            <WorldForm onSubmit={handleAddWorld} submitLabel="登録して保存">
-              <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/10 p-3 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={addRecommended}
-                  onChange={(event) => setAddRecommended(event.target.checked)}
-                  className="h-4 w-4 rounded border-white/20 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
-                />
-                おすすめとして公開する
-              </label>
-            </WorldForm>
-          ) : null}
+          {showForm ? <WorldForm onSubmit={handleAddWorld} submitLabel="登録して公開" /> : null}
 
           {message ? (
             <p
@@ -224,42 +213,52 @@ export function DiscoverTab() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleWorlds.map((world) => (
-            <DiscoverCard key={world.id} world={world} onChanged={refreshRecommendedWorlds} />
+            <DiscoverCard
+              key={world.id}
+              world={world}
+              onEdit={() => setEditingWorld(world)}
+              onOpenReviews={() => setReviewingWorld(world)}
+            />
           ))}
         </div>
       )}
+
+      {editingWorld ? (
+        <WorldEditModal
+          key={editingWorld.id}
+          world={editingWorld}
+          canDelete={canDeleteWorlds}
+          onClose={() => setEditingWorld(null)}
+          onSaved={async () => {
+            setEditingWorld(null);
+            await refreshRecommendedWorlds();
+          }}
+        />
+      ) : null}
+
+      {reviewingWorld ? (
+        <ReviewsModal
+          worldId={reviewingWorld.id}
+          worldName={reviewingWorld.name}
+          onClose={() => setReviewingWorld(null)}
+        />
+      ) : null}
     </div>
   );
 }
 
 function DiscoverCard({
   world,
-  onChanged,
+  onEdit,
+  onOpenReviews,
 }: {
   world: WorldSummary;
-  onChanged: () => Promise<void>;
+  onEdit: () => void;
+  onOpenReviews: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
   const isOwn = world.is_own;
   const isPublished = world.recommendation_count >= 1;
-  const isPublic =
-    isPublished ||
-    (isOwn && world.current_user_favorite?.is_recommended === true);
-
-  async function togglePublish() {
-    setBusy(true);
-    const nextRecommended = !(world.current_user_favorite?.is_recommended === true);
-    await fetch(`/api/worlds/${world.id}/favorite`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        note: world.current_user_favorite?.note ?? null,
-        is_recommended: nextRecommended,
-      }),
-    });
-    await onChanged();
-    setBusy(false);
-  }
+  const isPublic = isPublished || (isOwn && world.current_user_favorite?.is_recommended === true);
 
   return (
     <div className="relative">
@@ -270,20 +269,16 @@ function DiscoverCard({
       ) : null}
       <WorldCard
         world={world}
+        onOpenReviews={onOpenReviews}
         actions={
           <div className="flex flex-col gap-2">
             {isOwn ? (
               <button
                 type="button"
-                onClick={togglePublish}
-                disabled={busy}
-                className={
-                  isPublic
-                    ? "rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 transition hover:bg-amber-500/20 disabled:opacity-50"
-                    : "rounded-xl border border-cyan-500/30 bg-cyan-500/20 px-3 py-2 text-xs text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-50"
-                }
+                onClick={onEdit}
+                className="rounded-xl border border-cyan-500/30 bg-cyan-500/20 px-3 py-2 text-xs text-cyan-100 transition hover:bg-cyan-500/30"
               >
-                {busy ? "更新中…" : isPublic ? "非公開に戻す" : "公開する"}
+                編集
               </button>
             ) : null}
             <a

@@ -1,5 +1,10 @@
 import { PLATFORM_BADGE_CLASSNAMES, PLATFORM_LABELS } from "@/lib/worlds/platforms";
-import type { Platform, WorldAddedByProfile, WorldSummary } from "@/types/worlds";
+import type {
+  Platform,
+  WorldAddedByProfile,
+  WorldReviewPreview,
+  WorldSummary,
+} from "@/types/worlds";
 import { StarRating } from "./StarRating";
 
 type CardWorld = {
@@ -14,23 +19,35 @@ type CardWorld = {
   average_rating?: number | null;
   review_count?: number;
   recommendation_count?: number;
+  reviews_preview?: WorldReviewPreview[];
 };
+
+function truncateReviewText(value: string | null, maxLength = 60) {
+  const normalized = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "レビュー本文はまだありません。";
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength)}…`;
+}
 
 export function WorldCard({
   world,
   actions,
   footer,
+  onOpenReviews,
 }: {
   world: CardWorld | WorldSummary;
   actions?: React.ReactNode;
   footer?: React.ReactNode;
+  onOpenReviews?: () => void;
 }) {
   const platformLabel = PLATFORM_LABELS[world.platform];
   const rating = typeof world.average_rating === "number" ? world.average_rating : null;
   const reviewCount = typeof world.review_count === "number" ? world.review_count : 0;
   const recommendationCount =
     typeof world.recommendation_count === "number" ? world.recommendation_count : 0;
+  const reviewsPreview = Array.isArray(world.reviews_preview) ? world.reviews_preview : [];
   const addedByName = world.added_by_profile?.display_name?.trim() || "匿名";
+  const canOpenReviews = Boolean(onOpenReviews) && reviewCount > 0;
 
   return (
     <article className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/50 shadow-card">
@@ -69,6 +86,7 @@ export function WorldCard({
                 <span className="inline-flex items-center gap-2 text-xs text-slate-300">
                   <StarRating value={rating} readonly size="sm" />
                   <span>{rating.toFixed(1)}</span>
+                  <span>({reviewCount}件の平均)</span>
                 </span>
               ) : (
                 <span className="text-xs text-slate-500">未評価</span>
@@ -126,6 +144,49 @@ export function WorldCard({
             <span>レビュー {reviewCount} 件</span>
             <span>おすすめ {recommendationCount} 件</span>
           </div>
+        </div>
+
+        <div
+          role={canOpenReviews ? "button" : undefined}
+          tabIndex={canOpenReviews ? 0 : undefined}
+          onClick={canOpenReviews ? onOpenReviews : undefined}
+          onKeyDown={
+            canOpenReviews
+              ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpenReviews?.();
+                  }
+                }
+              : undefined
+          }
+          className={`rounded-xl border border-white/10 px-3 py-3 ${
+            canOpenReviews
+              ? "cursor-pointer bg-white/[0.03] transition hover:border-cyan-500/30 hover:bg-cyan-500/5"
+              : "bg-white/[0.02]"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              最近のレビュー
+            </p>
+            {canOpenReviews ? <span className="text-xs text-cyan-200">一覧を見る</span> : null}
+          </div>
+
+          {reviewsPreview.length > 0 ? (
+            <ul className="mt-3 space-y-2 text-sm text-slate-300">
+              {reviewsPreview.map((review, index) => {
+                const displayName = review.display_name?.trim() || "匿名";
+                return (
+                  <li key={`${displayName}-${index}`} className="ml-4 list-disc pl-1">
+                    {displayName}: {truncateReviewText(review.body)} / ★{review.rating}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-slate-500">最近のレビューはまだありません。</p>
+          )}
         </div>
 
         {footer ? <div className="border-t border-white/5 pt-4">{footer}</div> : null}

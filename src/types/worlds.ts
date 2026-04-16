@@ -5,6 +5,11 @@ export interface WorldAddedByProfile {
   avatar_url: string | null;
 }
 
+export interface WorldReviewProfile {
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
 export interface World {
   id: string;
   platform: Platform;
@@ -37,10 +42,21 @@ export interface WorldReview {
   created_at: string;
 }
 
+export interface WorldReviewPreview {
+  display_name: string | null;
+  body: string | null;
+  rating: number;
+}
+
+export interface WorldReviewDetail extends WorldReview {
+  profile: WorldReviewProfile | null;
+}
+
 export interface WorldSummary extends World {
   average_rating: number | null;
   review_count: number;
   recommendation_count: number;
+  reviews_preview: WorldReviewPreview[];
   current_user_favorite: UserFavoriteWorld | null;
   current_user_review: WorldReview | null;
   is_own: boolean;

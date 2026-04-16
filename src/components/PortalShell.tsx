@@ -87,18 +87,12 @@ export function PortalShell({
                     : "text-slate-300 hover:bg-white/5",
                 ].join(" ")}
               >
-                <span
-                  className={
-                    isActive ? "mt-0.5 text-accent-soft" : "mt-0.5 text-slate-400"
-                  }
-                >
+                <span className={isActive ? "mt-0.5 text-accent-soft" : "mt-0.5 text-slate-400"}>
                   {t.icon}
                 </span>
                 <span className="flex-1">
                   <span className="block font-medium">{t.label}</span>
-                  <span className="mt-0.5 block text-xs text-slate-400">
-                    {t.description}
-                  </span>
+                  <span className="mt-0.5 block text-xs text-slate-400">{t.description}</span>
                 </span>
               </button>
             );
@@ -168,9 +162,7 @@ export function PortalShell({
                 onClick={() => setTab(t.key)}
                 className={[
                   "shrink-0 rounded-full px-4 py-1.5 text-sm transition",
-                  isActive
-                    ? "bg-accent-primary text-white"
-                    : "bg-white/5 text-slate-300",
+                  isActive ? "bg-accent-primary text-white" : "bg-white/5 text-slate-300",
                 ].join(" ")}
               >
                 {t.label}
@@ -181,9 +173,7 @@ export function PortalShell({
 
         {/* Page header */}
         <div className="border-b border-white/5 px-6 py-6 md:px-10 md:py-8">
-          <p className="text-xs uppercase tracking-widest text-slate-500">
-            {active.label}
-          </p>
+          <p className="text-xs uppercase tracking-widest text-slate-500">{active.label}</p>
           <h1 className="mt-1 text-2xl font-bold text-white md:text-3xl">
             {tab === "personal"
               ? `ようこそ、${displayName} さん`
@@ -203,7 +193,9 @@ export function PortalShell({
               </div>
             ) : null}
             {tab === "personal" && <PersonalTab profile={profile} email={email} />}
-            {tab === "discover" && <DiscoverTab />}
+            {tab === "discover" && (
+              <DiscoverTab canDeleteWorlds={profile?.plan_tier === "enterprise"} />
+            )}
             {tab === "admin" && isEnterprise && <AdminTab />}
           </div>
         </main>
@@ -214,7 +206,16 @@ export function PortalShell({
 
 function IconLogo() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="3" y="3" width="7" height="7" rx="1" />
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -225,7 +226,16 @@ function IconLogo() {
 
 function IconUser() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
     </svg>
@@ -234,7 +244,16 @@ function IconUser() {
 
 function IconChart() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
       <line x1="6" y1="20" x2="6" y2="14" />
@@ -244,7 +263,16 @@ function IconChart() {
 
 function IconCompass() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="10" />
       <polygon points="16 8 14 14 8 16 10 10 16 8" />
     </svg>
