@@ -49,7 +49,7 @@ function LoginContent() {
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: "twitter",
+      provider: "x",
       options: {
         redirectTo: getCallbackUrl(next),
       },
