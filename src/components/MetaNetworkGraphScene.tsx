@@ -7,10 +7,17 @@ import type { Platform, WorldLayoutEdge, WorldLayoutNode } from "@/types/worlds"
 import { StarRating } from "./world/StarRating";
 
 const PLATFORM_NODE_CLASSES: Record<Platform, string> = {
-  hubs: "border-emerald-400/70 bg-emerald-400 shadow-[0_0_28px_rgba(52,211,153,0.55)]",
-  vrchat: "border-rose-400/70 bg-rose-400 shadow-[0_0_28px_rgba(251,113,133,0.55)]",
-  spatial: "border-violet-400/70 bg-violet-400 shadow-[0_0_28px_rgba(167,139,250,0.55)]",
-  other: "border-amber-400/70 bg-amber-400 shadow-[0_0_28px_rgba(251,191,36,0.55)]",
+  hubs: "border-emerald-300 bg-emerald-300 shadow-[0_0_14px_rgba(52,211,153,0.95),0_0_42px_rgba(52,211,153,0.8),0_0_90px_rgba(52,211,153,0.45)]",
+  vrchat: "border-rose-300 bg-rose-300 shadow-[0_0_14px_rgba(251,113,133,0.95),0_0_42px_rgba(251,113,133,0.8),0_0_90px_rgba(251,113,133,0.45)]",
+  spatial: "border-violet-300 bg-violet-300 shadow-[0_0_14px_rgba(167,139,250,0.95),0_0_42px_rgba(167,139,250,0.8),0_0_90px_rgba(167,139,250,0.45)]",
+  other: "border-amber-300 bg-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.95),0_0_42px_rgba(251,191,36,0.8),0_0_90px_rgba(251,191,36,0.45)]",
+};
+
+const PLATFORM_HALO_CLASSES: Record<Platform, string> = {
+  hubs: "bg-emerald-400/25",
+  vrchat: "bg-rose-400/25",
+  spatial: "bg-violet-400/25",
+  other: "bg-amber-400/25",
 };
 
 const PLATFORM_PANEL_CLASSES: Record<Platform, string> = {
@@ -97,9 +104,15 @@ function GraphNode({ node }: { node: WorldLayoutNode }) {
           onClick={() => window.open(node.url, "_blank", "noopener,noreferrer")}
           className="group relative cursor-pointer border-none bg-transparent p-0 text-left"
         >
-          <span
-            className={`block h-3.5 w-3.5 rounded-full border ${PLATFORM_NODE_CLASSES[node.platform]} transition-transform duration-200 group-hover:scale-125`}
-          />
+          <span className="relative block h-4 w-4">
+            <span
+              aria-hidden
+              className={`absolute inset-[-14px] rounded-full blur-xl ${PLATFORM_HALO_CLASSES[node.platform]} transition-transform duration-200 group-hover:scale-125`}
+            />
+            <span
+              className={`relative block h-4 w-4 rounded-full border ${PLATFORM_NODE_CLASSES[node.platform]} transition-transform duration-200 group-hover:scale-125`}
+            />
+          </span>
           <span className="mt-2 block whitespace-nowrap text-[11px] font-medium text-white/95 drop-shadow-[0_0_8px_rgba(15,23,42,0.9)]">
             {node.name}
           </span>

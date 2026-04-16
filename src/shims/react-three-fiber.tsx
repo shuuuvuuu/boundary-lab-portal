@@ -120,7 +120,12 @@ export function Canvas({
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
-      setDistance((current) => clamp(current + event.deltaY * 0.01, 11, 28));
+      // 近距離ほど感度を下げて細かいズームを可能に
+      setDistance((current) => {
+        const step = Math.max(0.4, current * 0.08);
+        const next = current + Math.sign(event.deltaY) * step * (Math.abs(event.deltaY) / 100);
+        return clamp(next, 3, 60);
+      });
     };
 
     element.addEventListener("pointerdown", handlePointerDown);
