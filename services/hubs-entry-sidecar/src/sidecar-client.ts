@@ -5,16 +5,22 @@ import { maskHubId, maskSessionId } from "./alert.js";
 import type { SidecarConfig } from "./config.js";
 import type { EntryStore } from "./entry-store.js";
 import type { Logger } from "./logger.js";
+import { generatePermsToken } from "./perms-token.js";
 import { normalizePresence, normalizePresenceState } from "./presence.js";
 import type { EntrySource, PresenceDiff, PresenceState } from "./types.js";
 
 type PhoenixChannel = ReturnType<InstanceType<typeof phoenix.Socket>["channel"]>;
+const PERMS_TOKEN_REFRESH_MS = 6 * 60 * 60 * 1000;
+const JOIN_FAILURE_ALERT_THROTTLE_MS = 15 * 60 * 1000;
 
 export class HubsEntrySidecarClient {
   private readonly socket: InstanceType<typeof phoenix.Socket>;
   private readonly channels = new Map<string, PhoenixChannel>();
   private readonly joinRetryAttempts = new Map<string, number>();
   private readonly joinRetryTimers = new Map<string, NodeJS.Timeout>();
+  private readonly joinFailureAlertAt = new Map<string, number>();
+  private readonly permsTokenRefreshTimer: NodeJS.Timeout;
+  private permsToken: string;
   private disconnectedAt: Date | null = new Date();
   private lastDisconnectedAt: Date | null = new Date();
   private everOpened = false;
@@ -27,6 +33,17 @@ export class HubsEntrySidecarClient {
     private readonly alertClient: AlertClient,
     private readonly logger: Logger,
   ) {
+    this.permsToken = generatePermsToken(config.reticulumBotAccessKey);
+    this.permsTokenRefreshTimer = setInterval(() => {
+      try {
+        this.permsToken = generatePermsToken(this.config.reticulumBotAccessKey);
+        this.logger.debug("refreshed reticulum perms token");
+      } catch (error) {
+        this.logger.error({ err: String(error) }, "failed to refresh reticulum perms token");
+      }
+    }, PERMS_TOKEN_REFRESH_MS);
+    this.permsTokenRefreshTimer.unref?.();
+
     this.socket = new phoenix.Socket(config.reticulumWsUrl, {
       transport: WebSocket,
       params: { vsn: "2.0.0" },
@@ -66,6 +83,8 @@ export class HubsEntrySidecarClient {
   }
 
   close(): void {
+    clearInterval(this.permsTokenRefreshTimer);
+
     for (const timer of this.joinRetryTimers.values()) {
       clearTimeout(timer);
     }
@@ -129,7 +148,7 @@ export class HubsEntrySidecarClient {
   }
 
   private joinPayload(): Record<string, unknown> {
-    const payload: Record<string, unknown> = {
+    return {
       profile: {
         displayName: this.config.botDisplayName,
       },
@@ -139,14 +158,8 @@ export class HubsEntrySidecarClient {
         discord: true,
         entry_history_sidecar: true,
       },
-      bot_access_key: this.config.reticulumBotAccessKey,
+      perms_token: this.permsToken,
     };
-
-    if (this.config.reticulumPermsToken) {
-      payload.perms_token = this.config.reticulumPermsToken;
-    }
-
-    return payload;
   }
 
   private async handlePresenceState(hubId: string, state: PresenceState): Promise<void> {
@@ -204,7 +217,7 @@ export class HubsEntrySidecarClient {
     const message = "failed to join hub channel";
     const meta = { hub_id: maskHubId(hubId), reason: sanitizeReason(reason) };
     this.logger.error(meta, message);
-    await this.alertClient.notify("warn", message, meta);
+    await this.notifyJoinFailureAlert(hubId, message, meta);
 
     const withinFailFastWindow = Date.now() - this.firstStartedAt.getTime() < 180_000;
     if (withinFailFastWindow && looksAuthRelated(reason)) {
@@ -215,6 +228,22 @@ export class HubsEntrySidecarClient {
     }
 
     this.scheduleJoinRetry(hubId);
+  }
+
+  private async notifyJoinFailureAlert(
+    hubId: string,
+    message: string,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    const now = Date.now();
+    const lastAlertAt = this.joinFailureAlertAt.get(hubId) ?? 0;
+    if (now - lastAlertAt < JOIN_FAILURE_ALERT_THROTTLE_MS) {
+      this.logger.debug({ hub_id: maskHubId(hubId) }, "suppressed duplicate join failure alert");
+      return;
+    }
+
+    this.joinFailureAlertAt.set(hubId, now);
+    await this.alertClient.notify("warn", message, meta);
   }
 
   private failFast(error: unknown): void {
@@ -243,7 +272,13 @@ export class HubsEntrySidecarClient {
 
 function looksAuthRelated(reason: unknown): boolean {
   const text = sanitizeReason(reason).toLowerCase();
-  return text.includes("auth") || text.includes("unauthorized") || text.includes("forbidden");
+  return (
+    text.includes("auth") ||
+    text.includes("unauthorized") ||
+    text.includes("forbidden") ||
+    text.includes("join_denied") ||
+    text.includes("perms_token")
+  );
 }
 
 function sanitizeReason(reason: unknown): string {

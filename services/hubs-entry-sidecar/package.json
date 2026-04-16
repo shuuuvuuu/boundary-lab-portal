@@ -15,12 +15,14 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
+    "jsonwebtoken": "^9.0.2",
     "pg": "^8.20.0",
     "phoenix": "^1.7.21",
     "pino": "^9.0.0",
     "ws": "^8.18.1"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.20.0",
     "@types/phoenix": "^1.6.7",

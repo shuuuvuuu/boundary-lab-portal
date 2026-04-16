@@ -15,7 +15,7 @@ npm start
 
 - `RETICULUM_WS_URL`: Reticulum Phoenix socket endpoint. `.../socket` and `.../socket/websocket?vsn=2.0.0` are both accepted.
 - `RETICULUM_DB_URL`: read-only Reticulum Postgres URL used to enumerate public hubs.
-- `RETICULUM_BOT_ACCESS_KEY`: bot access key configured in Reticulum.
+- `RETICULUM_BOT_ACCESS_KEY`: PEM private key used to sign the Reticulum `perms_token` JWT.
 - `SUPABASE_URL`: Supabase project URL.
 - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key.
 - `DISCORD_ALERT_WEBHOOK_URL`: Discord webhook for operational alerts.
@@ -29,6 +29,6 @@ Optional:
 
 ## Notes
 
-- Protected rooms with `entry_mode = 'allow'` are excluded by the default query.
+- The default hub query includes rooms with `entry_mode = 'allow'` and `entry_mode = 'invite'`, and excludes only `deny`.
 - The sidecar records session-level rows. Multi-tab users intentionally produce multiple open entries.
 - On reconnect, open DB rows missing from the new snapshot are closed with `closed_reason = 'reconnect_reconcile'`.
