@@ -5,6 +5,7 @@ import type {
   WorldReviewPreview,
   WorldSummary,
 } from "@/types/worlds";
+import { CollectionAddControl } from "./CollectionAddControl";
 import { StarRating } from "./StarRating";
 
 type CardWorld = {
@@ -20,6 +21,10 @@ type CardWorld = {
   review_count?: number;
   recommendation_count?: number;
   reviews_preview?: WorldReviewPreview[];
+  current_user_visit_count?: number;
+  current_user_last_visited_at?: string | null;
+  active_user_count?: number;
+  upcoming_event?: WorldSummary["upcoming_event"];
 };
 
 function truncateReviewText(value: string | null, maxLength = 60) {
@@ -34,11 +39,13 @@ export function WorldCard({
   actions,
   footer,
   onOpenReviews,
+  allowCollectionAdd = false,
 }: {
   world: CardWorld | WorldSummary;
   actions?: React.ReactNode;
   footer?: React.ReactNode;
   onOpenReviews?: () => void;
+  allowCollectionAdd?: boolean;
 }) {
   const platformLabel = PLATFORM_LABELS[world.platform];
   const rating = typeof world.average_rating === "number" ? world.average_rating : null;
@@ -48,6 +55,12 @@ export function WorldCard({
   const reviewsPreview = Array.isArray(world.reviews_preview) ? world.reviews_preview : [];
   const addedByName = world.added_by_profile?.display_name?.trim() || "匿名";
   const canOpenReviews = Boolean(onOpenReviews) && reviewCount > 0;
+  const visitCount = typeof world.current_user_visit_count === "number" ? world.current_user_visit_count : 0;
+  const activeUserCount = typeof world.active_user_count === "number" ? world.active_user_count : 0;
+  const upcomingEvent = world.upcoming_event ?? null;
+  const isUpcomingSoon =
+    upcomingEvent !== null &&
+    new Date(upcomingEvent.starts_at).getTime() - Date.now() <= 7 * 24 * 60 * 60 * 1000;
 
   return (
     <article className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/50 shadow-card">
@@ -82,6 +95,15 @@ export function WorldCard({
               >
                 {platformLabel}
               </span>
+              {activeUserCount >= 1 ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                  </span>
+                  {activeUserCount} 人入室中
+                </span>
+              ) : null}
               {rating !== null ? (
                 <span className="inline-flex items-center gap-2 text-xs text-slate-300">
                   <StarRating value={rating} readonly size="sm" />
@@ -107,6 +129,25 @@ export function WorldCard({
             ) : (
               <p className="mt-2 text-sm text-slate-500">説明はまだありません。</p>
             )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+              <span>訪問 {visitCount} 回</span>
+              <span>
+                最終訪問{" "}
+                {world.current_user_last_visited_at
+                  ? new Date(world.current_user_last_visited_at).toLocaleString("ja-JP")
+                  : "なし"}
+              </span>
+            </div>
+
+            {upcomingEvent ? (
+              <div
+                className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-medium ${isUpcomingSoon ? "border border-amber-400/30 bg-amber-400/15 text-amber-50" : "border border-white/10 bg-white/5 text-slate-200"}`}
+              >
+                <span>次回開催</span>
+                <span>{new Date(upcomingEvent.starts_at).toLocaleString("ja-JP")}</span>
+              </div>
+            ) : null}
           </div>
 
           {actions ? <div className="shrink-0">{actions}</div> : null}
@@ -145,6 +186,8 @@ export function WorldCard({
             <span>おすすめ {recommendationCount} 件</span>
           </div>
         </div>
+
+        <CollectionAddControl worldId={world.id} enabled={allowCollectionAdd} />
 
         <div
           role={canOpenReviews ? "button" : undefined}

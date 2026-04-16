@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/with-auth";
+import { getPublicProfileMap } from "@/lib/profiles/public-profiles";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 import { normalizeWorldReviewRow, type WorldReviewRow } from "@/lib/worlds/registry";
 
@@ -13,17 +14,7 @@ export const GET = withRateLimit(
     const { id } = await params;
     const { data, error } = await supabase
       .from("world_reviews")
-      .select(
-        `
-          id,
-          world_id,
-          user_id,
-          rating,
-          body,
-          created_at,
-          profile:profiles!world_reviews_user_id_fkey(display_name, avatar_url)
-        `,
-      )
+      .select("id, world_id, user_id, rating, body, created_at")
       .eq("world_id", id)
       .order("created_at", { ascending: false });
 
@@ -31,6 +22,14 @@ export const GET = withRateLimit(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(((data ?? []) as WorldReviewRow[]).map(normalizeWorldReviewRow));
+    const rows = (data ?? []) as WorldReviewRow[];
+    const profileMap = await getPublicProfileMap(
+      supabase,
+      rows.map((row) => row.user_id),
+    );
+
+    return NextResponse.json(
+      rows.map((row) => normalizeWorldReviewRow(row, profileMap)),
+    );
   }),
 );

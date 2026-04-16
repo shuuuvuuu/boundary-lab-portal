@@ -28,6 +28,10 @@ export function WorldEditModal({
   const [description, setDescription] = useState(world.description ?? "");
   const [thumbnailUrl, setThumbnailUrl] = useState(world.thumbnail_url ?? "");
   const [tagsInput, setTagsInput] = useState(world.tags.join(", "));
+  const [recurringSchedule, setRecurringSchedule] = useState(world.recurring_schedule ?? "");
+  const [nextEventAt, setNextEventAt] = useState(
+    world.next_event_at ? world.next_event_at.slice(0, 16) : "",
+  );
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ kind: "error"; text: string } | null>(null);
@@ -53,6 +57,8 @@ export function WorldEditModal({
         description,
         thumbnail_url: thumbnailUrl,
         tags: normalizeTags(tagsInput),
+        recurring_schedule: recurringSchedule,
+        next_event_at: nextEventAt || null,
       }),
     });
     setSaving(false);
@@ -148,6 +154,31 @@ export function WorldEditModal({
               className={inputClass}
             />
           </label>
+
+          {canDelete ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2">
+                <span className="text-xs text-slate-400">定期スケジュール</span>
+                <textarea
+                  value={recurringSchedule}
+                  onChange={(event) => setRecurringSchedule(event.target.value)}
+                  rows={3}
+                  placeholder="毎週金曜 21:00 JST"
+                  className={inputClass}
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-xs text-slate-400">次回開催日時</span>
+                <input
+                  type="datetime-local"
+                  value={nextEventAt}
+                  onChange={(event) => setNextEventAt(event.target.value)}
+                  className={inputClass}
+                />
+              </label>
+            </div>
+          ) : null}
 
           {message ? <p className="text-sm text-rose-300">{message.text}</p> : null}
 

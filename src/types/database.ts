@@ -1,3 +1,5 @@
+import type { PublicProfileSummary } from "./profiles";
+
 export type PlanTier = "free" | "standard" | "professional" | "enterprise";
 
 export interface Profile {
@@ -18,8 +20,27 @@ export interface CalendarEvent {
   description: string | null;
   starts_at: string;
   ends_at: string;
+  world_id: string | null;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export type NewCalendarEvent = Pick<CalendarEvent, "title" | "description" | "starts_at" | "ends_at">;
+export type NewCalendarEvent = Pick<
+  CalendarEvent,
+  "title" | "description" | "starts_at" | "ends_at" | "world_id" | "is_public"
+>;
+
+export interface CalendarEventSummary extends CalendarEvent {
+  is_own: boolean;
+  owner_profile: PublicProfileSummary | null;
+  world:
+    | {
+        id: string;
+        name: string;
+        url: string;
+        platform: "hubs" | "vrchat" | "spatial" | "other";
+        thumbnail_url: string | null;
+      }
+    | null;
+}

@@ -39,8 +39,15 @@ async function fetchRecommendedWorlds() {
   return (await response.json()) as WorldSummary[];
 }
 
-export function DiscoverTab({ canDeleteWorlds = false }: { canDeleteWorlds?: boolean }) {
+export function DiscoverTab({
+  canDeleteWorlds = false,
+  canManageCollections = false,
+}: {
+  canDeleteWorlds?: boolean;
+  canManageCollections?: boolean;
+}) {
   const [worlds, setWorlds] = useState<WorldSummary[]>([]);
+  const [recentWorlds, setRecentWorlds] = useState<WorldSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [platform, setPlatform] = useState<"all" | Platform>("all");
@@ -53,9 +60,20 @@ export function DiscoverTab({ canDeleteWorlds = false }: { canDeleteWorlds?: boo
 
   useEffect(() => {
     setLoading(true);
-    fetchRecommendedWorlds()
-      .then((data) => {
-        setWorlds(data);
+    Promise.all([
+      fetchRecommendedWorlds(),
+      fetch("/api/worlds?recommended_only=true&sort=recent&limit=20", { cache: "no-store" }).then(
+        async (response) => {
+          if (!response.ok) {
+            throw new Error(await parseErrorMessage(response));
+          }
+          return (await response.json()) as WorldSummary[];
+        },
+      ),
+    ])
+      .then(([recommended, recent]) => {
+        setWorlds(recommended);
+        setRecentWorlds(recent);
         setError(null);
       })
       .catch((nextError: Error) => setError(nextError.message))
@@ -161,6 +179,76 @@ export function DiscoverTab({ canDeleteWorlds = false }: { canDeleteWorlds?: boo
         </div>
       </section>
 
+      <section className="rounded-3xl border border-white/10 bg-bg-secondary/40 p-5 shadow-card md:p-6">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Recent Registry</p>
+            <h3 className="mt-2 text-xl font-semibold text-white">最近登録されたワールド</h3>
+          </div>
+          <span className="text-xs text-slate-500">{recentWorlds.length} 件</span>
+        </div>
+
+        {recentWorlds.length === 0 ? (
+          <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-sm text-slate-400">
+            最近登録されたワールドはまだありません。
+          </div>
+        ) : (
+          <div className="mt-5 flex gap-4 overflow-x-auto pb-2">
+            {recentWorlds.map((world) => {
+              const addedByName = world.added_by_profile?.display_name?.trim() || "匿名";
+
+              return (
+                <article
+                  key={world.id}
+                  className="min-w-[260px] max-w-[260px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40"
+                >
+                  <a
+                    href={world.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block aspect-[16/9] overflow-hidden bg-slate-900"
+                  >
+                    {world.thumbnail_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={world.thumbnail_url}
+                        alt={world.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-end bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_45%),linear-gradient(135deg,_rgba(15,23,42,1),_rgba(30,41,59,1))] p-3 text-xs uppercase tracking-[0.24em] text-slate-200">
+                        {PLATFORM_LABELS[world.platform]}
+                      </div>
+                    )}
+                  </a>
+                  <div className="space-y-3 p-4">
+                    <p className="truncate text-sm font-semibold text-white">{world.name}</p>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      {world.added_by_profile?.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={world.added_by_profile.avatar_url}
+                          alt=""
+                          className="h-6 w-6 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold text-white">
+                          {addedByName.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <span className="truncate">{addedByName}</span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {new Date(world.created_at).toLocaleString("ja-JP")}
+                    </p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -218,6 +306,7 @@ export function DiscoverTab({ canDeleteWorlds = false }: { canDeleteWorlds?: boo
               world={world}
               onEdit={() => setEditingWorld(world)}
               onOpenReviews={() => setReviewingWorld(world)}
+              allowCollectionAdd={canManageCollections}
             />
           ))}
         </div>
@@ -251,10 +340,12 @@ function DiscoverCard({
   world,
   onEdit,
   onOpenReviews,
+  allowCollectionAdd = false,
 }: {
   world: WorldSummary;
   onEdit: () => void;
   onOpenReviews: () => void;
+  allowCollectionAdd?: boolean;
 }) {
   const isOwn = world.is_own;
   const isPublished = world.recommendation_count >= 1;
@@ -270,6 +361,7 @@ function DiscoverCard({
       <WorldCard
         world={world}
         onOpenReviews={onOpenReviews}
+        allowCollectionAdd={allowCollectionAdd}
         actions={
           <div className="flex flex-col gap-2">
             {isOwn ? (

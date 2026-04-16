@@ -44,11 +44,15 @@ export function Canvas({
   className,
   children,
   focus,
+  autoRotateYawStep = 0,
+  onUserInteraction,
 }: {
   camera?: { position?: Vec3 };
   className?: string;
   children: React.ReactNode;
   focus?: FocusTarget;
+  autoRotateYawStep?: number;
+  onUserInteraction?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 960, height: 640 });
@@ -97,6 +101,7 @@ export function Canvas({
         return;
       }
 
+      onUserInteraction?.();
       pointerId = event.pointerId;
       lastX = event.clientX;
       lastY = event.clientY;
@@ -113,6 +118,7 @@ export function Canvas({
       lastX = event.clientX;
       lastY = event.clientY;
 
+      onUserInteraction?.();
       setRotation((current) => ({
         yaw: current.yaw + deltaX * 0.008,
         pitch: clamp(current.pitch + deltaY * 0.006, -1.1, 1.1),
@@ -131,6 +137,7 @@ export function Canvas({
     const handleWheel = (event: WheelEvent) => {
       if (focusActiveRef.current) return;
       event.preventDefault();
+      onUserInteraction?.();
       // 近距離ほど感度を下げて細かいズームを可能に
       setDistance((current) => {
         const step = Math.max(0.4, current * 0.08);
@@ -152,7 +159,7 @@ export function Canvas({
       element.removeEventListener("pointercancel", handlePointerUp);
       element.removeEventListener("wheel", handleWheel);
     };
-  }, []);
+  }, [onUserInteraction]);
 
   // focus target へカメラを滑らかに移動。focus が null に戻ったら何もしない
   // （ズーム/回転状態はそのまま残して UX の急変を避ける）
@@ -186,6 +193,28 @@ export function Canvas({
       cancelAnimationFrame(rafId);
     };
   }, [focus]);
+
+  useEffect(() => {
+    if (!autoRotateYawStep || focusActiveRef.current) {
+      return undefined;
+    }
+
+    let rafId = 0;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) {
+        return;
+      }
+      setRotation((current) => ({ ...current, yaw: current.yaw + autoRotateYawStep }));
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [autoRotateYawStep]);
 
   const contextValue = useMemo<SceneContextValue>(() => {
     return {

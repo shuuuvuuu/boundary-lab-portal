@@ -234,6 +234,11 @@ export function buildWorldLayout(worlds: WorldSummary[]): WorldLayoutResponse {
     added_by_profile: world.added_by_profile,
     average_rating: world.average_rating,
     review_count: world.review_count,
+    current_user_visit_count: world.current_user_visit_count,
+    current_user_last_visited_at: world.current_user_last_visited_at,
+    active_user_count: world.active_user_count,
+    collection_ids: world.collection_ids,
+    upcoming_event: world.upcoming_event,
     position: positions[index],
   }));
 

@@ -21,7 +21,11 @@ async function parseErrorMessage(response: Response) {
   }
 }
 
-export function FavoriteWorldsPanel() {
+export function FavoriteWorldsPanel({
+  canManageCollections = false,
+}: {
+  canManageCollections?: boolean;
+}) {
   const [worlds, setWorlds] = useState<WorldSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -187,6 +191,7 @@ export function FavoriteWorldsPanel() {
               world={world}
               onRefresh={loadFavorites}
               onOpenReviews={() => setReviewingWorld(world)}
+              canManageCollections={canManageCollections}
             />
           ))}
         </div>
@@ -207,10 +212,12 @@ function FavoriteWorldItem({
   world,
   onRefresh,
   onOpenReviews,
+  canManageCollections = false,
 }: {
   world: WorldSummary;
   onRefresh: () => Promise<void>;
   onOpenReviews: () => void;
+  canManageCollections?: boolean;
 }) {
   const [note, setNote] = useState(world.current_user_favorite?.note ?? "");
   const [isRecommended, setIsRecommended] = useState(
@@ -294,6 +301,7 @@ function FavoriteWorldItem({
       <WorldCard
         world={world}
         onOpenReviews={onOpenReviews}
+        allowCollectionAdd={canManageCollections}
         actions={
           <a
             href={world.url}

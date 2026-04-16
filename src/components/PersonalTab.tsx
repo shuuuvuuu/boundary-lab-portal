@@ -1,19 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CalendarEvent, NewCalendarEvent, Profile } from "@/types/database";
+import { MonthlyCalendarPanel } from "@/components/events/MonthlyCalendarPanel";
+import type { CalendarEventSummary, Profile } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import { FavoriteWorldsPanel } from "./world/FavoriteWorldsPanel";
 
-export function PersonalTab({ profile, email }: { profile: Profile | null; email: string }) {
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+export function PersonalTab({
+  profile,
+  email,
+  onOpenEventsCalendar,
+  canManageWorldCollections = false,
+}: {
+  profile: Profile | null;
+  email: string;
+  onOpenEventsCalendar: () => void;
+  canManageWorldCollections?: boolean;
+}) {
+  const [events, setEvents] = useState<CalendarEventSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/calendar");
+    const res = await fetch("/api/calendar?scope=mine");
     if (res.ok) {
-      const data = (await res.json()) as CalendarEvent[];
+      const data = (await res.json()) as CalendarEventSummary[];
       setEvents(data);
     }
     setLoading(false);
@@ -22,15 +33,6 @@ export function PersonalTab({ profile, email }: { profile: Profile | null; email
   useEffect(() => {
     load();
   }, []);
-
-  async function handleCreate(payload: NewCalendarEvent) {
-    const res = await fetch("/api/calendar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) await load();
-  }
 
   async function handleDelete(id: string) {
     const res = await fetch(`/api/calendar/${id}`, { method: "DELETE" });
@@ -73,44 +75,28 @@ export function PersonalTab({ profile, email }: { profile: Profile | null; email
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
         <Card title="個人カレンダー" subtitle="自分だけに見える予定">
-          <CalendarForm onSubmit={handleCreate} />
-          <div className="mt-6">
-            {loading ? (
-              <p className="text-sm text-slate-400">読み込み中…</p>
-            ) : events.length === 0 ? (
-              <EmptyState
-                title="予定はまだありません"
-                hint="上のフォームから追加できます"
-              />
-            ) : (
-              <ul className="divide-y divide-white/5 overflow-hidden rounded-lg border border-white/5 bg-bg-secondary/40">
-                {events.map((ev) => (
-                  <li
-                    key={ev.id}
-                    className="flex items-start justify-between gap-4 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-white">{ev.title}</p>
-                      <p className="mt-0.5 text-xs text-slate-400">
-                        {new Date(ev.starts_at).toLocaleString("ja-JP")}
-                        <span className="mx-1">〜</span>
-                        {new Date(ev.ends_at).toLocaleString("ja-JP")}
-                      </p>
-                      {ev.description && (
-                        <p className="mt-1 text-sm text-slate-300">{ev.description}</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleDelete(ev.id)}
-                      className="shrink-0 rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-red-500/10 hover:text-red-400"
-                    >
-                      削除
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          {loading ? (
+            <p className="text-sm text-slate-400">読み込み中…</p>
+          ) : events.length === 0 ? (
+            <EmptyState title="予定はまだありません" hint="イベントタブから追加できます" />
+          ) : (
+            <MonthlyCalendarPanel
+              events={events}
+              createButtonLabel="+ イベント"
+              onCreateClick={onOpenEventsCalendar}
+            />
+          )}
+          {events.length > 0 ? (
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={onOpenEventsCalendar}
+                className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
+              >
+                Events タブで管理
+              </button>
+            </div>
+          ) : null}
         </Card>
 
         <Card title="Hubs アカウント情報" subtitle="Reticulum DB と連携">
@@ -121,7 +107,7 @@ export function PersonalTab({ profile, email }: { profile: Profile | null; email
           title="お気に入りワールド"
           subtitle="個人メモ・おすすめ公開・レビューを管理"
         >
-          <FavoriteWorldsPanel />
+          <FavoriteWorldsPanel canManageCollections={canManageWorldCollections} />
         </Card>
 
         <Card
@@ -423,66 +409,5 @@ function PlanBadge({ tier }: { tier: string }) {
     >
       {tier}
     </span>
-  );
-}
-
-function CalendarForm({ onSubmit }: { onSubmit: (ev: NewCalendarEvent) => Promise<void> }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState("");
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title || !startsAt || !endsAt) return;
-    await onSubmit({
-      title,
-      description: description || null,
-      starts_at: new Date(startsAt).toISOString(),
-      ends_at: new Date(endsAt).toISOString(),
-    });
-    setTitle("");
-    setDescription("");
-    setStartsAt("");
-    setEndsAt("");
-  }
-
-  const inputClass =
-    "w-full rounded-md border border-white/10 bg-bg-primary px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-accent-primary focus:ring-1 focus:ring-accent-primary";
-
-  return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-2">
-      <input
-        className={`${inputClass} md:col-span-2`}
-        placeholder="タイトル"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-      />
-      <input
-        type="datetime-local"
-        className={inputClass}
-        value={startsAt}
-        onChange={(e) => setStartsAt(e.target.value)}
-      />
-      <input
-        type="datetime-local"
-        className={inputClass}
-        value={endsAt}
-        onChange={(e) => setEndsAt(e.target.value)}
-      />
-      <textarea
-        className={`${inputClass} md:col-span-2`}
-        placeholder="メモ (任意)"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        rows={2}
-      />
-      <button
-        type="submit"
-        className="rounded-md bg-accent-primary py-2 text-sm font-medium text-white transition hover:bg-accent-hover md:col-span-2"
-      >
-        追加
-      </button>
-    </form>
   );
 }

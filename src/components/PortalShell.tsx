@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Profile } from "@/types/database";
 import { PersonalTab } from "./PersonalTab";
 import { AdminTab } from "./AdminTab";
 import { DiscoverTab } from "./DiscoverTab";
+import { EventsTab, type EventsSubtabKey } from "./EventsTab";
 import { MetaNetworkTab } from "./MetaNetworkTab";
 
-type TabKey = "personal" | "metanetwork" | "discover" | "admin";
+export type TabKey = "personal" | "discover" | "events" | "metanetwork" | "admin";
 
 type TabDef = {
   key: TabKey;
@@ -21,14 +23,48 @@ export function PortalShell({
   email,
   canAccessAdmin,
   initialTab = "personal",
+  initialEventsSubtab = "calendar",
 }: {
   profile: Profile | null;
   email: string;
   canAccessAdmin: boolean;
   initialTab?: TabKey;
+  initialEventsSubtab?: EventsSubtabKey;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<TabKey>(initialTab);
+  const [eventsSubtab, setEventsSubtab] = useState<EventsSubtabKey>(initialEventsSubtab);
   const isEnterprise = profile?.plan_tier === "enterprise" && canAccessAdmin;
+  const updateRouteState = (nextTab: TabKey, nextEventsSubtab = eventsSubtab) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", nextTab);
+    if (nextTab === "events") {
+      params.set("sub", nextEventsSubtab);
+    } else {
+      params.delete("sub");
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  useEffect(() => {
+    const nextTabParam = searchParams.get("tab");
+    if (
+      nextTabParam === "personal" ||
+      nextTabParam === "discover" ||
+      nextTabParam === "events" ||
+      nextTabParam === "metanetwork" ||
+      nextTabParam === "admin"
+    ) {
+      setTab(nextTabParam);
+    }
+
+    const nextSubtab = searchParams.get("sub");
+    if (nextSubtab === "calendar" || nextSubtab === "collections" || nextSubtab === "live") {
+      setEventsSubtab(nextSubtab);
+    }
+  }, [searchParams]);
 
   const tabs: TabDef[] = [
     {
@@ -42,6 +78,12 @@ export function PortalShell({
       label: "ディスカバー",
       description: "クロスプラットフォームのおすすめワールド",
       icon: <IconCompass />,
+    },
+    {
+      key: "events",
+      label: "イベント",
+      description: "カレンダー・コレクション・配信情報",
+      icon: <IconCalendar />,
     },
     {
       key: "metanetwork",
@@ -86,7 +128,10 @@ export function PortalShell({
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setTab(t.key)}
+                onClick={() => {
+                  setTab(t.key);
+                  updateRouteState(t.key);
+                }}
                 className={[
                   "flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition",
                   isActive
@@ -166,7 +211,10 @@ export function PortalShell({
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setTab(t.key)}
+                onClick={() => {
+                  setTab(t.key);
+                  updateRouteState(t.key);
+                }}
                 className={[
                   "shrink-0 rounded-full px-4 py-1.5 text-sm transition",
                   isActive ? "bg-accent-primary text-white" : "bg-white/5 text-slate-300",
@@ -184,6 +232,8 @@ export function PortalShell({
           <h1 className="mt-1 text-2xl font-bold text-white md:text-3xl">
             {tab === "personal"
               ? `ようこそ、${displayName} さん`
+              : tab === "events"
+                ? "イベント"
               : tab === "metanetwork"
                 ? "メタネットワーク"
               : tab === "discover"
@@ -201,10 +251,33 @@ export function PortalShell({
                 運営タブは確認済みメールアドレスの連携後に利用できます。
               </div>
             ) : null}
-            {tab === "personal" && <PersonalTab profile={profile} email={email} />}
+            {tab === "personal" && (
+              <PersonalTab
+                profile={profile}
+                email={email}
+                onOpenEventsCalendar={() => {
+                  setTab("events");
+                  setEventsSubtab("calendar");
+                  updateRouteState("events", "calendar");
+                }}
+                canManageWorldCollections={isEnterprise}
+              />
+            )}
+            {tab === "events" && (
+              <EventsTab
+                initialSubtab={eventsSubtab}
+                onSubtabChange={(value) => {
+                  setEventsSubtab(value);
+                  updateRouteState("events", value);
+                }}
+              />
+            )}
             {tab === "metanetwork" && <MetaNetworkTab />}
             {tab === "discover" && (
-              <DiscoverTab canDeleteWorlds={profile?.plan_tier === "enterprise"} />
+              <DiscoverTab
+                canDeleteWorlds={profile?.plan_tier === "enterprise"}
+                canManageCollections={isEnterprise}
+              />
             )}
             {tab === "admin" && isEnterprise && <AdminTab />}
           </div>
@@ -307,6 +380,27 @@ function IconNetwork() {
       <path d="M7.9 7.1 10.3 16" />
       <path d="M16.1 8.1 13.7 16" />
       <path d="M8.2 6.3h7.6" />
+    </svg>
+  );
+}
+
+function IconCalendar() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2.5" x2="16" y2="6" />
+      <line x1="8" y1="2.5" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <rect x="7" y="13" width="4" height="4" rx="0.5" />
     </svg>
   );
 }

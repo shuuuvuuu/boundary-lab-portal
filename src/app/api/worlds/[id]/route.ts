@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/with-auth";
+import { getCurrentProfile } from "@/lib/profiles/current-profile";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 import { detectPlatform } from "@/lib/worlds/detect-platform";
 import { normalizeNullableText, normalizeTags } from "@/lib/worlds/registry";
@@ -19,6 +20,8 @@ export const PATCH = withRateLimit(
       description?: unknown;
       thumbnail_url?: unknown;
       tags?: unknown;
+      recurring_schedule?: unknown;
+      next_event_at?: unknown;
     };
 
     const { data: existing, error: existingError } = await supabase
@@ -45,6 +48,9 @@ export const PATCH = withRateLimit(
       return NextResponse.json({ error: "invalid payload" }, { status: 400 });
     }
 
+    const profile = await getCurrentProfile(supabase).catch(() => null);
+    const canEditSchedule = profile?.plan_tier === "enterprise";
+
     const { data, error } = await supabase
       .from("worlds")
       .update({
@@ -61,6 +67,16 @@ export const PATCH = withRateLimit(
             ? existing.thumbnail_url
             : normalizeNullableText(body.thumbnail_url),
         tags: body.tags === undefined ? existing.tags : normalizeTags(body.tags),
+        recurring_schedule:
+          body.recurring_schedule === undefined || !canEditSchedule
+            ? existing.recurring_schedule
+            : normalizeNullableText(body.recurring_schedule),
+        next_event_at:
+          body.next_event_at === undefined || !canEditSchedule
+            ? existing.next_event_at
+            : typeof body.next_event_at === "string" && body.next_event_at.trim()
+              ? new Date(body.next_event_at).toISOString()
+              : null,
       })
       .eq("id", id)
       .eq("added_by", user.id)
