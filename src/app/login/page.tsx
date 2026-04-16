@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -18,7 +18,37 @@ function LoginContent() {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [oauthStatus, setOauthStatus] = useState<"idle" | "starting" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [implicitRecovery, setImplicitRecovery] = useState<"idle" | "processing" | "error">("idle");
   const next = sanitizeNext(searchParams.get("next"));
+
+  // Supabase magic link の implicit flow は tokens をハッシュで返すため、
+  // サーバー側 /auth/callback は code を拾えず /login?error=no_code に転送される。
+  // ここでハッシュを拾って setSession し、home に遷移する。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash || !hash.includes("access_token")) return;
+
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+    if (!accessToken || !refreshToken) return;
+
+    setImplicitRecovery("processing");
+    const supabase = createClient();
+    supabase.auth
+      .setSession({ access_token: accessToken, refresh_token: refreshToken })
+      .then(({ error }) => {
+        if (error) {
+          setImplicitRecovery("error");
+          setErrorMessage(`セッション復元に失敗: ${error.message}`);
+          return;
+        }
+        // ハッシュを消して遷移（history 汚染防止）
+        window.history.replaceState(null, "", window.location.pathname);
+        window.location.href = next;
+      });
+  }, [next]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -67,6 +97,10 @@ function LoginContent() {
     searchParams.get("oauth_error_code"),
     searchParams.get("oauth_error_description"),
   );
+
+  if (implicitRecovery === "processing") {
+    return <LoginShell>セッション復元中…</LoginShell>;
+  }
 
   return (
     <LoginShell>
