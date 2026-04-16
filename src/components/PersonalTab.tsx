@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CalendarEvent, NewCalendarEvent, Profile } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
+import { FavoriteWorldsPanel } from "./world/FavoriteWorldsPanel";
 
 export function PersonalTab({ profile, email }: { profile: Profile | null; email: string }) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -114,6 +115,13 @@ export function PersonalTab({ profile, email }: { profile: Profile | null; email
 
         <Card title="Hubs アカウント情報" subtitle="Reticulum DB と連携">
           <HubsAccountBlock />
+        </Card>
+
+        <Card
+          title="お気に入りワールド"
+          subtitle="個人メモ・おすすめ公開・レビューを管理"
+        >
+          <FavoriteWorldsPanel />
         </Card>
 
         <Card

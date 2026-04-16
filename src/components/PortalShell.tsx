@@ -4,8 +4,9 @@ import { useState } from "react";
 import type { Profile } from "@/types/database";
 import { PersonalTab } from "./PersonalTab";
 import { AdminTab } from "./AdminTab";
+import { DiscoverTab } from "./DiscoverTab";
 
-type TabKey = "personal" | "admin";
+type TabKey = "personal" | "discover" | "admin";
 
 type TabDef = {
   key: TabKey;
@@ -18,12 +19,14 @@ export function PortalShell({
   profile,
   email,
   canAccessAdmin,
+  initialTab = "personal",
 }: {
   profile: Profile | null;
   email: string;
   canAccessAdmin: boolean;
+  initialTab?: TabKey;
 }) {
-  const [tab, setTab] = useState<TabKey>("personal");
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const isEnterprise = profile?.plan_tier === "enterprise" && canAccessAdmin;
 
   const tabs: TabDef[] = [
@@ -32,6 +35,12 @@ export function PortalShell({
       label: "マイページ",
       description: "プロフィール・カレンダー・Hubs アカウント",
       icon: <IconUser />,
+    },
+    {
+      key: "discover",
+      label: "ディスカバー",
+      description: "クロスプラットフォームのおすすめワールド",
+      icon: <IconCompass />,
     },
     ...(isEnterprise
       ? ([
@@ -176,7 +185,11 @@ export function PortalShell({
             {active.label}
           </p>
           <h1 className="mt-1 text-2xl font-bold text-white md:text-3xl">
-            {tab === "personal" ? `ようこそ、${displayName} さん` : "運営ダッシュボード"}
+            {tab === "personal"
+              ? `ようこそ、${displayName} さん`
+              : tab === "discover"
+                ? "ディスカバー"
+                : "運営ダッシュボード"}
           </h1>
           <p className="mt-1 text-sm text-slate-400">{active.description}</p>
         </div>
@@ -190,6 +203,7 @@ export function PortalShell({
               </div>
             ) : null}
             {tab === "personal" && <PersonalTab profile={profile} email={email} />}
+            {tab === "discover" && <DiscoverTab />}
             {tab === "admin" && isEnterprise && <AdminTab />}
           </div>
         </main>
@@ -224,6 +238,15 @@ function IconChart() {
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
       <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  );
+}
+
+function IconCompass() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polygon points="16 8 14 14 8 16 10 10 16 8" />
     </svg>
   );
 }
