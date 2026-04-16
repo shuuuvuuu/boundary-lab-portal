@@ -96,7 +96,7 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Save kubeconfig
-        run: doctl kubernetes cluster kubeconfig save do-sgp1-boundarylabo-k8s --expiry-seconds 600
+        run: doctl kubernetes cluster kubeconfig save boundarylabo-k8s --expiry-seconds 600
 
       - name: Compute short SHA
         id: sha
