@@ -11,16 +11,20 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@react-three/drei": "^10.8.6",
+    "@react-three/fiber": "^9.4.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "next": "15.0.3",
     "pg": "^8.20.0",
     "react": "19.0.0-rc-66855b96-20241106",
-    "react-dom": "19.0.0-rc-66855b96-20241106"
+    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@types/pg": "^8.20.0",
+    "@types/three": "^0.180.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.20",

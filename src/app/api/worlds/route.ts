@@ -6,41 +6,9 @@ import { isPlatform } from "@/lib/worlds/platforms";
 import {
   normalizeNullableText,
   normalizeTags,
-  type WorldReviewRow,
   summarizeWorldRow,
 } from "@/lib/worlds/registry";
-import type { UserFavoriteWorld, World, WorldAddedByProfile } from "@/types/worlds";
-
-type WorldSelectRow = Omit<World, "added_by_profile"> & {
-  added_by_profile?: WorldAddedByProfile | WorldAddedByProfile[] | null;
-  user_favorite_worlds?: UserFavoriteWorld[] | null;
-  world_reviews?: WorldReviewRow[] | null;
-};
-
-const WORLD_SELECT = `
-  id,
-  platform,
-  external_id,
-  url,
-  name,
-  description,
-  thumbnail_url,
-  tags,
-  added_by,
-  added_by_profile:profiles!worlds_added_by_fkey(display_name, avatar_url),
-  created_at,
-  updated_at,
-  user_favorite_worlds(user_id, world_id, note, is_recommended, created_at),
-  world_reviews(
-    id,
-    world_id,
-    user_id,
-    rating,
-    body,
-    created_at,
-    profile:profiles!world_reviews_user_id_fkey(display_name, avatar_url)
-  )
-`;
+import { WORLD_SELECT, type WorldSelectRow } from "@/lib/worlds/select";
 
 export const GET = withRateLimit(
   { scope: "worlds:get", max: 90, windowMs: 60_000 },

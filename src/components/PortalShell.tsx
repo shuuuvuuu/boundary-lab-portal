@@ -5,8 +5,9 @@ import type { Profile } from "@/types/database";
 import { PersonalTab } from "./PersonalTab";
 import { AdminTab } from "./AdminTab";
 import { DiscoverTab } from "./DiscoverTab";
+import { MetaNetworkTab } from "./MetaNetworkTab";
 
-type TabKey = "personal" | "discover" | "admin";
+type TabKey = "personal" | "metanetwork" | "discover" | "admin";
 
 type TabDef = {
   key: TabKey;
@@ -42,6 +43,12 @@ export function PortalShell({
       description: "クロスプラットフォームのおすすめワールド",
       icon: <IconCompass />,
     },
+    {
+      key: "metanetwork",
+      label: "メタネットワーク",
+      description: "推薦ワールドの関係を 3D ワールドグラフで俯瞰",
+      icon: <IconNetwork />,
+    },
     ...(isEnterprise
       ? ([
           {
@@ -67,7 +74,7 @@ export function PortalShell({
             <IconLogo />
           </div>
           <div>
-            <p className="text-sm font-bold leading-tight">境界設計室</p>
+            <p className="text-sm font-bold leading-tight">Portal</p>
             <p className="text-xs text-slate-400">Boundary LAB</p>
           </div>
         </div>
@@ -177,6 +184,8 @@ export function PortalShell({
           <h1 className="mt-1 text-2xl font-bold text-white md:text-3xl">
             {tab === "personal"
               ? `ようこそ、${displayName} さん`
+              : tab === "metanetwork"
+                ? "メタネットワーク"
               : tab === "discover"
                 ? "ディスカバー"
                 : "運営ダッシュボード"}
@@ -186,13 +195,14 @@ export function PortalShell({
 
         {/* Tab content */}
         <main className="flex-1 px-4 py-6 md:px-10 md:py-8">
-          <div className="mx-auto max-w-5xl">
+          <div className={tab === "metanetwork" ? "mx-auto max-w-6xl" : "mx-auto max-w-5xl"}>
             {profile?.plan_tier === "enterprise" && !canAccessAdmin ? (
               <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
                 運営タブは確認済みメールアドレスの連携後に利用できます。
               </div>
             ) : null}
             {tab === "personal" && <PersonalTab profile={profile} email={email} />}
+            {tab === "metanetwork" && <MetaNetworkTab />}
             {tab === "discover" && (
               <DiscoverTab canDeleteWorlds={profile?.plan_tier === "enterprise"} />
             )}
@@ -275,6 +285,28 @@ function IconCompass() {
     >
       <circle cx="12" cy="12" r="10" />
       <polygon points="16 8 14 14 8 16 10 10 16 8" />
+    </svg>
+  );
+}
+
+function IconNetwork() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="6" cy="6" r="2.25" />
+      <circle cx="18" cy="7" r="2.25" />
+      <circle cx="12" cy="18" r="2.25" />
+      <path d="M7.9 7.1 10.3 16" />
+      <path d="M16.1 8.1 13.7 16" />
+      <path d="M8.2 6.3h7.6" />
     </svg>
   );
 }

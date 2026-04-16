@@ -61,3 +61,34 @@ export interface WorldSummary extends World {
   current_user_review: WorldReview | null;
   is_own: boolean;
 }
+
+export interface WorldLayoutPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface WorldLayoutNode {
+  id: string;
+  name: string;
+  platform: Platform;
+  url: string;
+  thumbnail_url: string | null;
+  description: string | null;
+  tags: string[];
+  added_by_profile: WorldAddedByProfile | null;
+  average_rating: number | null;
+  review_count: number;
+  position: WorldLayoutPosition;
+}
+
+export interface WorldLayoutEdge {
+  from_id: string;
+  to_id: string;
+  similarity: number;
+}
+
+export interface WorldLayoutResponse {
+  nodes: WorldLayoutNode[];
+  edges: WorldLayoutEdge[];
+}
