@@ -1,4 +1,4 @@
-name: Build & Push Container
+name: Build, Push & Deploy
 
 on:
   push:
@@ -84,3 +84,42 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=sidecar
           cache-to: type=gha,mode=max,scope=sidecar
+
+  deploy:
+    needs: [portal, hubs-entry-sidecar]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save kubeconfig
+        run: doctl kubernetes cluster kubeconfig save do-sgp1-boundarylabo-k8s --expiry-seconds 600
+
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - name: Update portal image
+        run: |
+          kubectl -n hcce set image deployment/portal \
+            portal=ghcr.io/${{ github.repository }}:${{ steps.sha.outputs.short }}
+
+      - name: Update hubs-entry-sidecar image
+        run: |
+          kubectl -n hcce set image deployment/hubs-entry-sidecar \
+            hubs-entry-sidecar=ghcr.io/${{ github.repository }}-hubs-entry-sidecar:${{ steps.sha.outputs.short }}
+
+      - name: Wait for portal rollout
+        run: kubectl -n hcce rollout status deployment/portal --timeout=5m
+
+      - name: Wait for sidecar rollout
+        run: kubectl -n hcce rollout status deployment/hubs-entry-sidecar --timeout=5m
+
+      - name: Summary
+        run: |
+          echo "## Deployed ${{ steps.sha.outputs.short }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- portal: \`ghcr.io/${{ github.repository }}:${{ steps.sha.outputs.short }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- sidecar: \`ghcr.io/${{ github.repository }}-hubs-entry-sidecar:${{ steps.sha.outputs.short }}\`" >> "$GITHUB_STEP_SUMMARY"
