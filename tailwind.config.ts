@@ -12,9 +12,9 @@ const config: Config = {
           tertiary: "#334155",   // slate-700
         },
         accent: {
-          primary: "#6366f1",    // indigo-500
-          hover: "#4f46e5",      // indigo-600
-          soft: "#818cf8",       // indigo-400
+          primary: "#0891b2",    // cyan-600
+          hover: "#0e7490",      // cyan-700
+          soft: "#22d3ee",       // cyan-400
         },
         star: "#facc15",          // yellow-400
         boundary: {
