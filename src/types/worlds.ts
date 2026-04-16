@@ -49,6 +49,11 @@ export interface WorldReviewDetail extends WorldReview {
   profile: WorldReviewProfile | null;
 }
 
+export interface PresentPortalUser {
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
 export interface WorldSummary extends World {
   average_rating: number | null;
   review_count: number;
@@ -59,6 +64,7 @@ export interface WorldSummary extends World {
   current_user_visit_count: number;
   current_user_last_visited_at: string | null;
   active_user_count: number;
+  present_portal_users: PresentPortalUser[];
   collection_ids: string[];
   upcoming_event: {
     title: string | null;
@@ -90,6 +96,7 @@ export interface WorldLayoutNode {
   current_user_visit_count: number;
   current_user_last_visited_at: string | null;
   active_user_count: number;
+  present_portal_users: PresentPortalUser[];
   collection_ids: string[];
   upcoming_event: WorldSummary["upcoming_event"];
   position: WorldLayoutPosition;

@@ -1,4 +1,5 @@
 import type {
+  PresentPortalUser,
   UserFavoriteWorld,
   World,
   WorldAddedByProfile,
@@ -55,6 +56,7 @@ export function summarizeWorldRow(
     currentUserVisitCount?: number;
     currentUserLastVisitedAt?: string | null;
     activeUserCount?: number;
+    presentPortalUsers?: PresentPortalUser[];
     collectionIds?: string[];
     upcomingEvent?: WorldSummary["upcoming_event"];
   },
@@ -108,6 +110,7 @@ export function summarizeWorldRow(
     current_user_visit_count: options.currentUserVisitCount ?? 0,
     current_user_last_visited_at: options.currentUserLastVisitedAt ?? null,
     active_user_count: options.activeUserCount ?? 0,
+    present_portal_users: options.presentPortalUsers ?? [],
     collection_ids: options.collectionIds ?? [],
     upcoming_event: options.upcomingEvent ?? null,
     is_own: row.added_by === options.userId,

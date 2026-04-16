@@ -237,6 +237,7 @@ export function buildWorldLayout(worlds: WorldSummary[]): WorldLayoutResponse {
     current_user_visit_count: world.current_user_visit_count,
     current_user_last_visited_at: world.current_user_last_visited_at,
     active_user_count: world.active_user_count,
+    present_portal_users: world.present_portal_users,
     collection_ids: world.collection_ids,
     upcoming_event: world.upcoming_event,
     position: positions[index],

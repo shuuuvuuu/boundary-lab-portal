@@ -24,6 +24,7 @@ type CardWorld = {
   current_user_visit_count?: number;
   current_user_last_visited_at?: string | null;
   active_user_count?: number;
+  present_portal_users?: { display_name: string | null; avatar_url: string | null }[];
   upcoming_event?: WorldSummary["upcoming_event"];
 };
 
@@ -57,6 +58,7 @@ export function WorldCard({
   const canOpenReviews = Boolean(onOpenReviews) && reviewCount > 0;
   const visitCount = typeof world.current_user_visit_count === "number" ? world.current_user_visit_count : 0;
   const activeUserCount = typeof world.active_user_count === "number" ? world.active_user_count : 0;
+  const presentPortalUsers = world.present_portal_users ?? [];
   const upcomingEvent = world.upcoming_event ?? null;
   const isUpcomingSoon =
     upcomingEvent !== null &&
@@ -102,6 +104,39 @@ export function WorldCard({
                     <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
                   </span>
                   {activeUserCount} 人入室中
+                </span>
+              ) : null}
+              {presentPortalUsers.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {presentPortalUsers.slice(0, 3).map((user, idx) =>
+                    user.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={idx}
+                        src={user.avatar_url}
+                        alt={user.display_name ?? "ユーザー"}
+                        title={user.display_name ?? "ユーザー"}
+                        className="h-5 w-5 rounded-full border border-emerald-400/70 object-cover"
+                      />
+                    ) : (
+                      <span
+                        key={idx}
+                        title={user.display_name ?? "ユーザー"}
+                        className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-400/70 bg-emerald-500/20 text-[9px] font-semibold text-emerald-100"
+                      >
+                        {user.display_name?.charAt(0).toUpperCase() ?? "?"}
+                      </span>
+                    ),
+                  )}
+                  <span className="text-[10px] text-emerald-200/90">
+                    {presentPortalUsers
+                      .slice(0, 3)
+                      .map((u) => u.display_name ?? "匿名")
+                      .join(" / ")}
+                    {presentPortalUsers.length > 3
+                      ? ` 他 ${presentPortalUsers.length - 3} 名`
+                      : ""}
+                  </span>
                 </span>
               ) : null}
               {rating !== null ? (

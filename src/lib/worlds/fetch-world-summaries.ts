@@ -10,6 +10,13 @@ type ActivityCountRow = {
   active_user_count: number;
 };
 
+type PresentPortalUserRow = {
+  hub_id: string;
+  hubs_account_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+};
+
 type VisitStatRow = {
   hub_id: string;
   visit_count: number;
@@ -87,6 +94,9 @@ export async function enrichWorldSummaries(
       currentUserVisitCount: row.external_id ? (visitCountMap.get(row.external_id) ?? 0) : 0,
       currentUserLastVisitedAt: row.external_id ? (lastVisitedMap.get(row.external_id) ?? null) : null,
       activeUserCount: row.external_id ? (activityMaps.activeUserCountMap.get(row.external_id) ?? 0) : 0,
+      presentPortalUsers: row.external_id
+        ? activityMaps.presentPortalUserMap.get(row.external_id) ?? []
+        : [],
       collectionIds: collectionMap.get(row.id) ?? [],
       upcomingEvent:
         pickUpcomingEvent(row.next_event_at, upcomingEventMap.get(row.id) ?? null) ?? null,
@@ -112,15 +122,17 @@ async function getWorldActivityMaps(
       activeUserCountMap: new Map<string, number>(),
       visitCountMap: new Map<string, number>(),
       lastVisitedMap: new Map<string, string | null>(),
+      presentPortalUserMap: new Map<string, { display_name: string | null; avatar_url: string | null }[]>(),
     };
   }
 
-  const [countsResult, visitsResult] = await Promise.all([
+  const [countsResult, visitsResult, presentResult] = await Promise.all([
     supabase.rpc("get_world_active_user_counts", { target_hub_ids: hubIds }),
     supabase.rpc("get_world_visit_stats", {
       target_hubs_account_id: hubsAccountId,
       target_hub_ids: hubIds,
     }),
+    supabase.rpc("get_world_present_portal_users", { target_hub_ids: hubIds }),
   ]);
 
   if (countsResult.error) {
@@ -129,6 +141,10 @@ async function getWorldActivityMaps(
 
   if (visitsResult.error) {
     throw visitsResult.error;
+  }
+
+  if (presentResult.error) {
+    throw presentResult.error;
   }
 
   const activeUserCountMap = new Map<string, number>(
@@ -146,10 +162,18 @@ async function getWorldActivityMaps(
     lastVisitedMap.set(row.hub_id, row.last_visited_at ?? null);
   });
 
+  const presentPortalUserMap = new Map<string, { display_name: string | null; avatar_url: string | null }[]>();
+  ((presentResult.data ?? []) as PresentPortalUserRow[]).forEach((row) => {
+    const list = presentPortalUserMap.get(row.hub_id) ?? [];
+    list.push({ display_name: row.display_name, avatar_url: row.avatar_url });
+    presentPortalUserMap.set(row.hub_id, list);
+  });
+
   return {
     activeUserCountMap,
     visitCountMap,
     lastVisitedMap,
+    presentPortalUserMap,
   };
 }
 

@@ -206,6 +206,38 @@ function FocusPanel({
           <span>登録者 {addedByName}</span>
         </div>
 
+        {node.present_portal_users && node.present_portal_users.length > 0 ? (
+          <div className="mt-4 space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-200">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              </span>
+              現在入室中
+            </div>
+            <ul className="space-y-1.5">
+              {node.present_portal_users.slice(0, 8).map((user, idx) => (
+                <li key={idx} className="flex items-center gap-2 text-xs text-emerald-50">
+                  {user.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover" />
+                  ) : (
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/30 text-[9px] font-semibold text-white">
+                      {user.display_name?.charAt(0).toUpperCase() ?? "?"}
+                    </span>
+                  )}
+                  <span>{user.display_name ?? "匿名"}</span>
+                </li>
+              ))}
+            </ul>
+            {node.present_portal_users.length > 8 ? (
+              <p className="text-[10px] text-emerald-200/70">
+                他 {node.present_portal_users.length - 8} 名
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         {node.tags.length > 0 ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {node.tags.slice(0, 8).map((tag) => (
@@ -253,6 +285,12 @@ function GraphNode({
           className={`group relative cursor-pointer border-none bg-transparent p-0 text-left ${selected ? "z-30" : ""}`}
         >
           <span className="relative block h-4 w-4">
+            {node.present_portal_users && node.present_portal_users.length > 0 ? (
+              <span
+                aria-hidden
+                className="absolute inset-[-22px] animate-pulse rounded-full border-2 border-emerald-300/80 bg-emerald-400/10 shadow-[0_0_24px_rgba(52,211,153,0.9)]"
+              />
+            ) : null}
             <span
               aria-hidden
               className={`absolute inset-[-14px] rounded-full blur-xl ${PLATFORM_HALO_CLASSES[node.platform]} transition-transform duration-200 ${selected ? "scale-150" : "group-hover:scale-125"}`}
