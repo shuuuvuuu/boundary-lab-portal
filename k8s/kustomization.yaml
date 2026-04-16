@@ -4,4 +4,5 @@ namespace: hcce
 resources:
   - deployment.yaml
   - ingress.yaml
+  - hubs-entry-sidecar.yaml
 # secret.example.yaml は参照用。実値は kubectl create secret で hcce に直接投入する。

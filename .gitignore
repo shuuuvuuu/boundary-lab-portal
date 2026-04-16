@@ -22,3 +22,10 @@ yarn-error.log*
 next-env.d.ts
 
 tsconfig.tsbuildinfo
+
+.secrets.local
+
+# Session-scoped scratch files (manifest builders, one-off migration runners)
+tmp-*.mjs
+tmp-*.json
+tmp-*.yaml
