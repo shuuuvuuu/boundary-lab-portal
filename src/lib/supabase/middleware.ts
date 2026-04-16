@@ -39,6 +39,23 @@ export async function updateSession(request: NextRequest) {
     // NEXT_PUBLIC_SITE_URL (ビルド時焼き込み) を基準にする。未設定時は nextUrl fallback。
     const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     const base = process.env.NEXT_PUBLIC_SITE_URL;
+
+    // テストプレイ用: TEST_PLAY_AUTO_LOGIN_EMAIL が設定されていれば
+    // 未ログイン訪問者を自動ログインルートに転送する。本番公開前に env を外すこと。
+    const testLoginTarget = process.env.TEST_PLAY_AUTO_LOGIN_EMAIL
+      ? base
+        ? new URL("/auth/test-login", base)
+        : (() => {
+            const u = request.nextUrl.clone();
+            u.pathname = "/auth/test-login";
+            return u;
+          })()
+      : null;
+    if (testLoginTarget) {
+      testLoginTarget.searchParams.set("next", next);
+      return NextResponse.redirect(testLoginTarget);
+    }
+
     const target = base
       ? new URL("/login", base)
       : (() => {
