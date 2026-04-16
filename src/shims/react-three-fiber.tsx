@@ -19,6 +19,8 @@ type SceneContextValue = {
   distance: number;
 };
 
+export type FocusTarget = { position: Vec3; distance?: number } | null;
+
 const SceneContext = createContext<SceneContextValue | null>(null);
 
 function clamp(value: number, min: number, max: number) {
@@ -41,10 +43,12 @@ export function Canvas({
   camera,
   className,
   children,
+  focus,
 }: {
   camera?: { position?: Vec3 };
   className?: string;
   children: React.ReactNode;
+  focus?: FocusTarget;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 960, height: 640 });
@@ -71,6 +75,11 @@ export function Canvas({
     return () => observer.disconnect();
   }, []);
 
+  const focusActiveRef = useRef<boolean>(false);
+  useEffect(() => {
+    focusActiveRef.current = Boolean(focus);
+  }, [focus]);
+
   useEffect(() => {
     const element = containerRef.current;
     if (!element) {
@@ -82,6 +91,7 @@ export function Canvas({
     let lastY = 0;
 
     const handlePointerDown = (event: PointerEvent) => {
+      if (focusActiveRef.current) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("[data-scene-interactive='true']")) {
         return;
@@ -119,6 +129,7 @@ export function Canvas({
     };
 
     const handleWheel = (event: WheelEvent) => {
+      if (focusActiveRef.current) return;
       event.preventDefault();
       // 近距離ほど感度を下げて細かいズームを可能に
       setDistance((current) => {
@@ -142,6 +153,39 @@ export function Canvas({
       element.removeEventListener("wheel", handleWheel);
     };
   }, []);
+
+  // focus target へカメラを滑らかに移動。focus が null に戻ったら何もしない
+  // （ズーム/回転状態はそのまま残して UX の急変を避ける）
+  useEffect(() => {
+    if (!focus) return undefined;
+    const [tx, ty, tz] = focus.position;
+    const nodeDist = Math.hypot(tx, ty, tz);
+    // cameraDepth を nodeDist * 0.04 前後に揃えることで
+    // ノードの原点距離に関係なく画面上の見かけサイズを一定に保つ。
+    // perspective = (nodeDist * 1.04) * 34 / (nodeDist * 0.04) ≈ 884 → scale ≒ 8.8 → 16px * 8.8 = 140px
+    const targetDistance = focus.distance ?? nodeDist * 1.04 + 0.08;
+    // 該当ノードが画面中央に来る yaw/pitch を逆算
+    const targetYaw = Math.atan2(tx, tz || 0.0001);
+    const targetPitch = clamp(Math.atan2(ty, Math.hypot(tx, tz || 0.0001)), -1.1, 1.1);
+
+    let rafId = 0;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      setRotation((current) => {
+        const nextYaw = current.yaw + (targetYaw - current.yaw) * 0.15;
+        const nextPitch = current.pitch + (targetPitch - current.pitch) * 0.15;
+        return { yaw: nextYaw, pitch: nextPitch };
+      });
+      setDistance((current) => current + (targetDistance - current) * 0.15);
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [focus]);
 
   const contextValue = useMemo<SceneContextValue>(() => {
     return {
