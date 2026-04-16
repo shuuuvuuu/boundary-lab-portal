@@ -146,18 +146,18 @@ function FocusPanel({
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center">
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="閉じる"
-        className="pointer-events-auto absolute right-4 top-4 rounded-full border border-white/15 bg-slate-950/70 p-2 text-slate-200 backdrop-blur transition hover:bg-slate-800"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
-      <div className="pointer-events-auto ml-auto h-full w-[360px] max-w-[90%] overflow-y-auto border-l border-white/10 bg-slate-950/70 p-5 text-sm text-slate-100 backdrop-blur-xl">
+      <div className="pointer-events-auto relative ml-auto h-full w-[360px] max-w-[90%] overflow-y-auto border-l border-white/10 bg-slate-950/70 p-5 text-sm text-slate-100 backdrop-blur-xl">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="閉じる"
+          className="absolute right-3 top-3 rounded-full border border-white/15 bg-slate-950/80 p-1.5 text-slate-200 transition hover:bg-slate-800"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
         <div className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
           {node.thumbnail_url ? (
             // eslint-disable-next-line @next/next/no-img-element
