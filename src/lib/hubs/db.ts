@@ -32,16 +32,37 @@ export type HubsAccount = {
 //   logins(account_id, identifier)           -- identifier は email
 //   accounts.identity has_one identities(account_id, name)
 // スキーマ差異がある場合はここを調整する。
-const LOOKUP_BY_EMAIL_SQL = `
+// Reticulum は logins.identifier_hash に base64(sha256(email + secret)) を
+// 保存しているが、portal 側からはその secret が取れないため直接メール検索が
+// できない。当面の運用では、Supabase 側で管理する「プロフィールに保存済みの
+// hubs_account_id」を主キーに使い、DB ルックアップは以下の 2 経路に留める:
+// 1) account_id が分かっている場合は account_id で直接引く
+// 2) それ以外は fallback として is_admin=true のアカウントを 1 件返す
+//    （現状 boundarylabo は admin 1 人運用のため）
+const LOOKUP_BY_ACCOUNT_ID_SQL = `
   SELECT
     a.account_id,
-    l.identifier AS email,
+    a.boundary_display_name AS identity_name_boundary,
     i.name AS identity_name,
+    a.is_admin,
     a.inserted_at AS created_at
   FROM accounts a
-  JOIN logins l ON l.account_id = a.account_id
   LEFT JOIN identities i ON i.account_id = a.account_id
-  WHERE lower(l.identifier) = lower($1)
+  WHERE a.account_id = $1
+  LIMIT 1
+`;
+
+const LOOKUP_ADMIN_SQL = `
+  SELECT
+    a.account_id,
+    a.boundary_display_name AS identity_name_boundary,
+    i.name AS identity_name,
+    a.is_admin,
+    a.inserted_at AS created_at
+  FROM accounts a
+  LEFT JOIN identities i ON i.account_id = a.account_id
+  WHERE a.is_admin = true
+  ORDER BY a.account_id
   LIMIT 1
 `;
 
@@ -53,28 +74,58 @@ const LOOKUP_HUB_NAMES_SQL = `
   WHERE hub_sid = ANY($1::text[])
 `;
 
-export async function lookupAccountByEmail(email: string): Promise<HubsAccount | null> {
-  const pool = getPool();
-  if (!pool) return null;
+type AccountRow = {
+  account_id: number | string;
+  identity_name: string | null;
+  identity_name_boundary: string | null;
+  is_admin: boolean;
+  created_at: Date | string;
+};
 
-  const res = await pool.query<{
-    account_id: number | string;
-    email: string;
-    identity_name: string | null;
-    created_at: Date | string;
-  }>(LOOKUP_BY_EMAIL_SQL, [email]);
-
-  const row = res.rows[0];
-  if (!row) return null;
-
+function rowToAccount(row: AccountRow, email: string): HubsAccount {
+  const displayName = row.identity_name_boundary ?? row.identity_name ?? null;
   return {
     account_id: Number(row.account_id),
-    email: row.email,
-    display_name: row.identity_name,
-    identity_name: row.identity_name,
+    email,
+    display_name: displayName,
+    identity_name: displayName,
     created_at:
       row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
   };
+}
+
+export async function lookupAccountById(
+  accountId: number | string,
+  email: string,
+): Promise<HubsAccount | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const res = await pool.query<AccountRow>(LOOKUP_BY_ACCOUNT_ID_SQL, [accountId]);
+  const row = res.rows[0];
+  return row ? rowToAccount(row, email) : null;
+}
+
+export async function lookupAdminAccount(email: string): Promise<HubsAccount | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const res = await pool.query<AccountRow>(LOOKUP_ADMIN_SQL);
+  const row = res.rows[0];
+  return row ? rowToAccount(row, email) : null;
+}
+
+/**
+ * Supabase の user.email から Hubs account を探す。
+ * 現状 Reticulum の identifier_hash アルゴリズムが確定していないため、
+ * ADM_EMAIL と一致すれば is_admin アカウントを返す fallback 実装。
+ */
+export async function lookupAccountByEmail(email: string): Promise<HubsAccount | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const admEmail = (process.env.RETICULUM_ADM_EMAIL || "").trim().toLowerCase();
+  if (admEmail && admEmail === email.trim().toLowerCase()) {
+    return lookupAdminAccount(email);
+  }
+  return null;
 }
 
 export function isReticulumDbConfigured(): boolean {
