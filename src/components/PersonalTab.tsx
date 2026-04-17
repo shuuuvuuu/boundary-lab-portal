@@ -34,11 +34,6 @@ export function PersonalTab({
     load();
   }, []);
 
-  async function handleDelete(id: string) {
-    const res = await fetch(`/api/calendar/${id}`, { method: "DELETE" });
-    if (res.ok) await load();
-  }
-
   async function handleUpdateProfile(display_name: string): Promise<string | null> {
     const supabase = createClient();
     if (!profile) return "プロフィールがまだ作成されていません";
@@ -58,14 +53,9 @@ export function PersonalTab({
       .from("avatars")
       .upload(path, file, { upsert: true, contentType: file.type });
     if (upErr) return upErr.message;
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("avatars").getPublicUrl(path);
-    // キャッシュバスター付きで保存
-    const urlWithBust = `${publicUrl}?v=${Date.now()}`;
     const { error: updErr } = await supabase
       .from("profiles")
-      .update({ avatar_url: urlWithBust })
+      .update({ avatar_url: path })
       .eq("id", profile.id);
     if (updErr) return updErr.message;
     return null;
@@ -309,6 +299,10 @@ function ProfileBlock({
               src={avatarUrl}
               alt="avatar"
               className="h-20 w-20 rounded-full object-cover ring-2 ring-accent-primary/40"
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = "/brand/default-avatar.svg";
+              }}
             />
           ) : (
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent-primary/20 text-2xl font-bold text-accent-soft ring-2 ring-accent-primary/40">

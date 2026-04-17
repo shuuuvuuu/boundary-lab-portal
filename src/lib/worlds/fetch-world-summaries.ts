@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { signAvatarUrls } from "@/lib/avatars/signing";
 import { getCurrentProfile } from "@/lib/profiles/current-profile";
 import { getPublicProfileMap } from "@/lib/profiles/public-profiles";
 import type { Platform, WorldSummary } from "@/types/worlds";
@@ -162,8 +163,17 @@ async function getWorldActivityMaps(
     lastVisitedMap.set(row.hub_id, row.last_visited_at ?? null);
   });
 
+  const signedPresentUsers = await signAvatarUrls(
+    supabase,
+    ((presentResult.data ?? []) as PresentPortalUserRow[]).map((row) => ({
+      display_name: row.display_name,
+      avatar_url: row.avatar_url,
+      hub_id: row.hub_id,
+    })),
+  );
+
   const presentPortalUserMap = new Map<string, { display_name: string | null; avatar_url: string | null }[]>();
-  ((presentResult.data ?? []) as PresentPortalUserRow[]).forEach((row) => {
+  signedPresentUsers.forEach((row) => {
     const list = presentPortalUserMap.get(row.hub_id) ?? [];
     list.push({ display_name: row.display_name, avatar_url: row.avatar_url });
     presentPortalUserMap.set(row.hub_id, list);

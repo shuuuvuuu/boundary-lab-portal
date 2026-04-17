@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { signAvatarUrls } from "@/lib/avatars/signing";
 import type { Profile } from "@/types/database";
 
 export async function getCurrentProfile(supabase: SupabaseClient): Promise<Profile | null> {
@@ -12,5 +13,6 @@ export async function getCurrentProfile(supabase: SupabaseClient): Promise<Profi
     return null;
   }
 
-  return data[0] as Profile;
+  const [profile] = await signAvatarUrls(supabase, [data[0] as Profile]);
+  return profile;
 }

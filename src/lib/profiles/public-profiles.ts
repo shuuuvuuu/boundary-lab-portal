@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { signAvatarUrls } from "@/lib/avatars/signing";
 import type { PublicProfileSummary } from "@/types/profiles";
 
 export async function getPublicProfileMap(
@@ -24,5 +25,6 @@ export async function getPublicProfileMap(
     avatar_url: row.avatar_url ?? null,
   }));
 
-  return new Map(rows.map((row) => [row.id, row]));
+  const signedRows = await signAvatarUrls(supabase, rows);
+  return new Map(signedRows.map((row) => [row.id, row]));
 }

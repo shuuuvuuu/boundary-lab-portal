@@ -4,6 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 // テストプレイ用: 未ログイン訪問者を TEST_PLAY_AUTO_LOGIN_EMAIL の magic link に
 // 転送してそのアカウントでログインさせる。本番公開前に env を外すこと。
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return new Response("Not Found", { status: 404 });
+  }
+
   const { searchParams, origin: requestOrigin } = new URL(request.url);
   const next = sanitizeNext(searchParams.get("next"));
   const base = process.env.NEXT_PUBLIC_SITE_URL || requestOrigin;

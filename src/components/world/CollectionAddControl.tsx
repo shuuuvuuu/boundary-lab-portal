@@ -88,7 +88,10 @@ export function CollectionAddControl({
               collection.id === selectedCollectionId
                 ? {
                     ...collection,
-                    worlds: [...collection.worlds, { id: worldId, name: "", platform: "other", thumbnail_url: null }],
+                    worlds: [
+                      ...collection.worlds,
+                      { id: worldId, name: "", platform: "other" as const, thumbnail_url: null },
+                    ],
                   }
                 : collection,
             );
