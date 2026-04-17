@@ -85,7 +85,7 @@ export function MetaNetworkGraphScene({
         focus={focus}
       >
         <Stars />
-        <OrbitControls enableDamping />
+        <OrbitControls />
 
         {edges.map((edge) => {
           const fromNode = nodeMap.get(edge.from_id);
