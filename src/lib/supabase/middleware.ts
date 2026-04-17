@@ -11,6 +11,11 @@ const PROTECTED_PREFIXES = [
   "/api/admin",
 ];
 
+const CLOSED_MODE_BYPASS_PATHS = ["/coming-soon", "/login", "/api/healthz"];
+const CLOSED_MODE_BYPASS_PREFIXES = ["/auth/"];
+const STATIC_ASSET_PATTERN =
+  /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|woff|woff2|ttf|otf)$/i;
+
 function isProtected(pathname: string) {
   if (pathname.startsWith("/api/public/")) {
     return false;
@@ -21,8 +26,59 @@ function isProtected(pathname: string) {
   );
 }
 
+function isPortalClosed() {
+  return process.env.PORTAL_CLOSED === "true";
+}
+
+function isClosedModeBypassPath(pathname: string) {
+  return (
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico" ||
+    STATIC_ASSET_PATTERN.test(pathname) ||
+    CLOSED_MODE_BYPASS_PATHS.includes(pathname) ||
+    CLOSED_MODE_BYPASS_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  );
+}
+
+function createPublicApiClosedResponse() {
+  return NextResponse.json(
+    { error: "portal closed for public preview" },
+    {
+      status: 503,
+      headers: {
+        "Cache-Control": "no-store",
+        "Retry-After": "3600",
+      },
+    },
+  );
+}
+
+function createRedirectUrl(request: NextRequest, pathname: string) {
+  const base = process.env.NEXT_PUBLIC_SITE_URL;
+
+  if (base) {
+    return new URL(pathname, base);
+  }
+
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  url.search = "";
+  return url;
+}
+
 export async function updateSession(request: NextRequest) {
-  if (!isProtected(request.nextUrl.pathname)) {
+  const { pathname } = request.nextUrl;
+  const closed = isPortalClosed();
+
+  if (closed && pathname.startsWith("/api/public/")) {
+    return createPublicApiClosedResponse();
+  }
+
+  if (!closed && !isProtected(pathname)) {
+    return NextResponse.next({ request });
+  }
+
+  if (closed && isClosedModeBypassPath(pathname)) {
     return NextResponse.next({ request });
   }
 
@@ -51,7 +107,24 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
+  if (closed) {
+    if (!user) {
+      return NextResponse.redirect(createRedirectUrl(request, "/coming-soon"));
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("plan_tier")
+      .eq("id", user.id)
+      .maybeSingle<{ plan_tier: string | null }>();
+
+    if (profile?.plan_tier === "enterprise") {
+      return response;
+    }
+
+    return NextResponse.redirect(createRedirectUrl(request, "/coming-soon"));
+  }
+
   if (!user) {
     if (pathname.startsWith("/api/")) {
       return response;
