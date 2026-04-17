@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  PORTAL_TAB_PATHS,
+  isPortalEventsSubtabKey,
+  isPortalTabKey,
+  type TabKey,
+} from "@/lib/portal/navigation";
 import type { Profile } from "@/types/database";
 import { PersonalTab } from "./PersonalTab";
 import { AdminTab } from "./AdminTab";
 import { DiscoverTab } from "./DiscoverTab";
 import { EventsTab, type EventsSubtabKey } from "./EventsTab";
 import { MetaNetworkTab } from "./MetaNetworkTab";
-
-export type TabKey = "personal" | "discover" | "events" | "metanetwork" | "admin";
 
 type TabDef = {
   key: TabKey;
@@ -36,35 +40,44 @@ export function PortalShell({
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<TabKey>(initialTab);
   const [eventsSubtab, setEventsSubtab] = useState<EventsSubtabKey>(initialEventsSubtab);
-  const isEnterprise = profile?.plan_tier === "enterprise" && canAccessAdmin;
+  const isEnterprise = canAccessAdmin;
   const updateRouteState = (nextTab: TabKey, nextEventsSubtab = eventsSubtab) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("tab", nextTab);
+    params.delete("tab");
     if (nextTab === "events") {
       params.set("sub", nextEventsSubtab);
     } else {
       params.delete("sub");
     }
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    const href = params.size
+      ? `${PORTAL_TAB_PATHS[nextTab]}?${params.toString()}`
+      : PORTAL_TAB_PATHS[nextTab];
+    router.replace(href, { scroll: false });
   };
 
   useEffect(() => {
     const nextTabParam = searchParams.get("tab");
-    if (
-      nextTabParam === "personal" ||
-      nextTabParam === "discover" ||
-      nextTabParam === "events" ||
-      nextTabParam === "metanetwork" ||
-      nextTabParam === "admin"
-    ) {
-      setTab(nextTabParam);
-    }
+    const tabFromPath =
+      pathname === "/app"
+        ? "personal"
+        : Object.entries(PORTAL_TAB_PATHS).find(([, href]) => href === pathname)?.[0] ?? null;
+    const nextTab =
+      tabFromPath === "personal" && isPortalTabKey(nextTabParam)
+        ? nextTabParam
+        : tabFromPath && isPortalTabKey(tabFromPath)
+          ? tabFromPath
+          : isPortalTabKey(nextTabParam)
+            ? nextTabParam
+            : initialTab;
+    setTab(nextTab);
 
     const nextSubtab = searchParams.get("sub");
-    if (nextSubtab === "calendar" || nextSubtab === "collections" || nextSubtab === "live") {
+    if (isPortalEventsSubtabKey(nextSubtab)) {
       setEventsSubtab(nextSubtab);
+    } else if (nextTab === "events") {
+      setEventsSubtab(initialEventsSubtab);
     }
-  }, [searchParams]);
+  }, [initialEventsSubtab, initialTab, pathname, searchParams]);
 
   const tabs: TabDef[] = [
     {
@@ -159,6 +172,10 @@ export function PortalShell({
                 src={profile.avatar_url}
                 alt=""
                 className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/10"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = "/brand/default-avatar.svg";
+                }}
               />
             ) : (
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-primary/20 text-sm font-bold text-accent-soft ring-1 ring-white/10">
@@ -246,11 +263,6 @@ export function PortalShell({
         {/* Tab content */}
         <main className="flex-1 px-4 py-6 md:px-10 md:py-8">
           <div className={tab === "metanetwork" ? "mx-auto max-w-6xl" : "mx-auto max-w-5xl"}>
-            {profile?.plan_tier === "enterprise" && !canAccessAdmin ? (
-              <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                運営タブは確認済みメールアドレスの連携後に利用できます。
-              </div>
-            ) : null}
             {tab === "personal" && (
               <PersonalTab
                 profile={profile}

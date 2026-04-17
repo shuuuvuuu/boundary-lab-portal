@@ -1,4 +1,4 @@
-import { getPreferredEmail, hasVerifiedEmailIdentity } from "@/lib/auth/user-state";
+import { getPreferredEmail } from "@/lib/auth/user-state";
 import { getCurrentProfile } from "@/lib/profiles/current-profile";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/types/database";
@@ -24,6 +24,6 @@ export async function loadPortalShellData() {
   return {
     profile,
     email: getPreferredEmail(user, profile) ?? "",
-    canAccessAdmin: hasVerifiedEmailIdentity(user),
+    canAccessAdmin: profile?.plan_tier === "enterprise",
   };
 }
