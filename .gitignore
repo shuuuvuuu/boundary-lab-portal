@@ -30,3 +30,6 @@ tmp-*.mjs
 tmp-*.json
 tmp-*.yaml
 .npm-cache/
+
+# Supabase CLI ephemeral workspace
+supabase/.temp/

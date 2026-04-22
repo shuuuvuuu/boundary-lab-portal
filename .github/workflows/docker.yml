@@ -1,8 +1,16 @@
+# Build, Push & Deploy
+#
+# 2026-04-22: K8s クラスタ (boundarylabo-k8s) を削除し、Droplet (boundary-world-01)
+# への docker compose 相乗り構成へ移行中。自動 push/deploy を一時停止し、
+# workflow_dispatch のみで走るようにした。Droplet デプロイ自動化は Phase 2 以降で
+# 再整備する予定 (現状は代表が手動で `docker compose up -d --build portal` を実行)。
+#
+# 旧 K8s deploy ジョブは残すと必ず fail するのでコメントアウトしてある。
+# build/push ジョブだけ手動実行して GHCR に image を積めるようにしておく。
+
 name: Build, Push & Deploy
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 jobs:
@@ -85,41 +93,49 @@ jobs:
           cache-from: type=gha,scope=sidecar
           cache-to: type=gha,mode=max,scope=sidecar
 
-  deploy:
-    needs: [portal, hubs-entry-sidecar]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
-    steps:
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Save kubeconfig
-        run: doctl kubernetes cluster kubeconfig save boundarylabo-k8s --expiry-seconds 600
-
-      - name: Compute short SHA
-        id: sha
-        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
-
-      - name: Update portal image
-        run: |
-          kubectl -n hcce set image deployment/portal \
-            portal=ghcr.io/${{ github.repository }}:${{ steps.sha.outputs.short }}
-
-      - name: Update hubs-entry-sidecar image
-        run: |
-          kubectl -n hcce set image deployment/hubs-entry-sidecar \
-            hubs-entry-sidecar=ghcr.io/${{ github.repository }}-hubs-entry-sidecar:${{ steps.sha.outputs.short }}
-
-      - name: Wait for portal rollout
-        run: kubectl -n hcce rollout status deployment/portal --timeout=5m
-
-      - name: Wait for sidecar rollout
-        run: kubectl -n hcce rollout status deployment/hubs-entry-sidecar --timeout=5m
-
-      - name: Summary
-        run: |
-          echo "## Deployed ${{ steps.sha.outputs.short }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- portal: \`ghcr.io/${{ github.repository }}:${{ steps.sha.outputs.short }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- sidecar: \`ghcr.io/${{ github.repository }}-hubs-entry-sidecar:${{ steps.sha.outputs.short }}\`" >> "$GITHUB_STEP_SUMMARY"
+  # ---------------------------------------------------------------------------
+  # 旧 K8s deploy ジョブ (2026-04-22 以降無効化)
+  #
+  # boundarylabo-k8s クラスタ削除済みのため、このジョブが走ると必ず失敗する。
+  # Droplet への反映は Phase 2 で以下のどちらかに置き換える予定:
+  #   (a) SSH appleboy/ssh-action で `cd /opt/boundary/infra && docker compose pull portal && docker compose up -d portal`
+  #   (b) Droplet 側に watchtower or GitOps agent を置いて GHCR tag 監視
+  # ---------------------------------------------------------------------------
+  # deploy:
+  #   needs: [portal, hubs-entry-sidecar]
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/master'
+  #   steps:
+  #     - name: Install doctl
+  #       uses: digitalocean/action-doctl@v2
+  #       with:
+  #         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+  #
+  #     - name: Save kubeconfig
+  #       run: doctl kubernetes cluster kubeconfig save boundarylabo-k8s --expiry-seconds 600
+  #
+  #     - name: Compute short SHA
+  #       id: sha
+  #       run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+  #
+  #     - name: Update portal image
+  #       run: |
+  #         kubectl -n hcce set image deployment/portal \
+  #           portal=ghcr.io/${{ github.repository }}:${{ steps.sha.outputs.short }}
+  #
+  #     - name: Update hubs-entry-sidecar image
+  #       run: |
+  #         kubectl -n hcce set image deployment/hubs-entry-sidecar \
+  #           hubs-entry-sidecar=ghcr.io/${{ github.repository }}-hubs-entry-sidecar:${{ steps.sha.outputs.short }}
+  #
+  #     - name: Wait for portal rollout
+  #       run: kubectl -n hcce rollout status deployment/portal --timeout=5m
+  #
+  #     - name: Wait for sidecar rollout
+  #       run: kubectl -n hcce rollout status deployment/hubs-entry-sidecar --timeout=5m
+  #
+  #     - name: Summary
+  #       run: |
+  #         echo "## Deployed ${{ steps.sha.outputs.short }}" >> "$GITHUB_STEP_SUMMARY"
+  #         echo "- portal: \`ghcr.io/${{ github.repository }}:${{ steps.sha.outputs.short }}\`" >> "$GITHUB_STEP_SUMMARY"
+  #         echo "- sidecar: \`ghcr.io/${{ github.repository }}-hubs-entry-sidecar:${{ steps.sha.outputs.short }}\`" >> "$GITHUB_STEP_SUMMARY"

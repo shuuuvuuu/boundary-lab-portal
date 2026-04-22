@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED_PREFIXES = [
   "/app",
+  "/admin",
   "/onboarding",
   "/api/calendar",
   "/api/collections",
@@ -110,6 +111,12 @@ export async function updateSession(request: NextRequest) {
   if (closed) {
     if (!user) {
       return NextResponse.redirect(createRedirectUrl(request, "/coming-soon"));
+    }
+
+    // /admin と /api/admin はクローズモードでもオーナーだけ通過。
+    // 実際の owner email チェックは layout.tsx / route handler 側で実施。
+    if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+      return response;
     }
 
     const { data: profile } = await supabase
