@@ -82,12 +82,13 @@ async function sentryFetch<T>(path: string): Promise<T> {
 
 export async function listIssues(
   projectSlug: string,
-  opts: { query?: string; limit?: number } = {},
+  opts: { query?: string; limit?: number; statsPeriod?: string } = {},
 ): Promise<SentryIssue[]> {
   const { org } = getConfig();
   const limit = opts.limit ?? 25;
   const query = opts.query ?? "is:unresolved";
-  const cacheKey = `issues:${org}:${projectSlug}:${query}:${limit}`;
+  const statsPeriod = opts.statsPeriod ?? "24h";
+  const cacheKey = `issues:${org}:${projectSlug}:${query}:${limit}:${statsPeriod}`;
   const cached = getCached<SentryIssue[]>(cacheKey);
   if (cached) return cached;
 
@@ -95,10 +96,61 @@ export async function listIssues(
     query,
     limit: String(limit),
     sort: "date",
-    statsPeriod: "24h",
+    statsPeriod,
   });
   const data = await sentryFetch<SentryIssue[]>(
     `/projects/${org}/${projectSlug}/issues/?${params.toString()}`,
+  );
+  setCached(cacheKey, data);
+  return data;
+}
+
+/**
+ * Sentry Events API で warning / error level の Event 直近一覧を取得する。
+ *
+ * Phase 1 (monitoring) の Logs タブ用。
+ * pino-sentry-transport 経由で届く warn/error ログは Sentry 上では Message event として
+ * 保存される。厳密な "Logs" データセットは Sentry の新機能（experimental）だが、
+ * Phase 1 では既存の `/projects/{org}/{slug}/events/` を level フィルタで叩いて
+ * Message ベースのイベントだけを timeline 表示する。
+ *
+ * Sentry の Events API は Issues とは別に「各発生イベント」を返すため、
+ * 同じ issue でも発生毎に 1 行表示できる（=log 的）。
+ *
+ * 参考: GET /api/0/projects/{org}/{slug}/events/ は stable な endpoint。
+ */
+export type SentryLogEvent = {
+  id: string;
+  eventID: string;
+  dateCreated: string;
+  message: string | null;
+  title: string;
+  level?: string;
+  location: string | null;
+  culprit: string | null;
+  platform: string;
+  groupID: string | null;
+  tags: Array<{ key: string; value: string }>;
+};
+
+export async function listEvents(
+  projectSlug: string,
+  opts: { level?: "warning" | "error"; limit?: number } = {},
+): Promise<SentryLogEvent[]> {
+  const { org } = getConfig();
+  const limit = opts.limit ?? 50;
+  const levelPart = opts.level ? `level:${opts.level}` : "level:[warning,error,fatal]";
+  const cacheKey = `events:${org}:${projectSlug}:${levelPart}:${limit}`;
+  const cached = getCached<SentryLogEvent[]>(cacheKey);
+  if (cached) return cached;
+
+  const params = new URLSearchParams({
+    query: levelPart,
+    limit: String(limit),
+    // 新しい順
+  });
+  const data = await sentryFetch<SentryLogEvent[]>(
+    `/projects/${org}/${projectSlug}/events/?${params.toString()}`,
   );
   setCached(cacheKey, data);
   return data;
