@@ -1,7 +1,7 @@
-import { IssuesClient } from "./IssuesClient";
+import { OpsTabs } from "./OpsTabs";
 
 export const dynamic = "force-dynamic";
 
 export default function AdminOpsPage() {
-  return <IssuesClient />;
+  return <OpsTabs />;
 }
