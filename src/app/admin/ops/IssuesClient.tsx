@@ -109,6 +109,7 @@ export function IssuesClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<FetchDetailState>({ kind: "idle" });
   const [copyHint, setCopyHint] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchList = useCallback(async () => {
     setListState({ kind: "loading" });
@@ -121,6 +122,30 @@ export function IssuesClient() {
       setListState({ kind: "error", message: err instanceof Error ? err.message : "unknown error" });
     }
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/admin/ops/refresh", {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        setCopyHint(`キャッシュ再取得失敗 (HTTP ${res.status}) — キャッシュ済データを表示します`);
+        setTimeout(() => setCopyHint(null), 4000);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      setCopyHint(`キャッシュ再取得失敗 (${msg}) — キャッシュ済データを表示します`);
+      setTimeout(() => setCopyHint(null), 4000);
+    }
+    try {
+      await fetchList();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchList, refreshing]);
 
   const fetchDetail = useCallback(async (id: string) => {
     setDetailState({ kind: "loading", id });
@@ -174,11 +199,12 @@ export function IssuesClient() {
         <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
           <h2 className="font-medium">未解決 Issues (直近 24h)</h2>
           <button
-            onClick={fetchList}
-            className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
+            onClick={handleRefresh}
+            disabled={refreshing || listState.kind === "loading"}
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-slate-800"
             type="button"
           >
-            再取得
+            {refreshing || listState.kind === "loading" ? "読み込み中..." : "再取得"}
           </button>
         </header>
         <div className="divide-y divide-slate-800">

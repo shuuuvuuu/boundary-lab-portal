@@ -55,7 +55,7 @@ function setCached<T>(key: string, data: T): void {
 
 function getConfig() {
   const token = process.env.SENTRY_AUTH_TOKEN;
-  const org = process.env.SENTRY_ORG ?? "shuu";
+  const org = process.env.SENTRY_ORG ?? "shuu-dw";
   if (!token) {
     throw new Error("SENTRY_AUTH_TOKEN is not set");
   }
