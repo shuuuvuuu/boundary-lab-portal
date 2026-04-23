@@ -153,9 +153,20 @@ export async function listEvents(
   const allowed: ReadonlySet<string> = opts.level
     ? new Set([opts.level])
     : new Set(["warning", "error", "fatal"]);
-  const filtered = raw
+  const normalized = raw.map((e) => {
+    if (typeof e.level === "string" && e.level.length > 0) return e;
+    const levelTag = e.tags?.find((t) => t.key === "level")?.value;
+    return levelTag ? { ...e, level: levelTag } : e;
+  });
+  const filtered = normalized
     .filter((e) => typeof e.level === "string" && allowed.has(e.level))
     .slice(0, limit);
+  if (raw.length > 0 && filtered.length === 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[sentry] listEvents: ${projectSlug} raw=${raw.length} filtered=0, sample.level=${normalized[0]?.level ?? "undef"} sample.tags=${JSON.stringify(normalized[0]?.tags?.slice(0, 3) ?? [])}`,
+    );
+  }
   setCached(cacheKey, filtered);
   return filtered;
 }
