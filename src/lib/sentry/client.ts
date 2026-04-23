@@ -139,21 +139,25 @@ export async function listEvents(
 ): Promise<SentryLogEvent[]> {
   const { org } = getConfig();
   const limit = opts.limit ?? 50;
-  const levelPart = opts.level ? `level:${opts.level}` : "level:[warning,error,fatal]";
-  const cacheKey = `events:${org}:${projectSlug}:${levelPart}:${limit}`;
+  const cacheKey = `events:${org}:${projectSlug}:${opts.level ?? "all"}:${limit}`;
   const cached = getCached<SentryLogEvent[]>(cacheKey);
   if (cached) return cached;
 
   const params = new URLSearchParams({
-    query: levelPart,
-    limit: String(limit),
-    // 新しい順
+    limit: String(limit * 3),
+    full: "true",
   });
-  const data = await sentryFetch<SentryLogEvent[]>(
+  const raw = await sentryFetch<SentryLogEvent[]>(
     `/projects/${org}/${projectSlug}/events/?${params.toString()}`,
   );
-  setCached(cacheKey, data);
-  return data;
+  const allowed: ReadonlySet<string> = opts.level
+    ? new Set([opts.level])
+    : new Set(["warning", "error", "fatal"]);
+  const filtered = raw
+    .filter((e) => typeof e.level === "string" && allowed.has(e.level))
+    .slice(0, limit);
+  setCached(cacheKey, filtered);
+  return filtered;
 }
 
 export async function getIssue(issueId: string): Promise<SentryIssueDetail> {
