@@ -14,6 +14,16 @@ const PROTECTED_PREFIXES = [
 
 const CLOSED_MODE_BYPASS_PATHS = ["/coming-soon", "/login", "/api/healthz"];
 const CLOSED_MODE_BYPASS_PREFIXES = ["/auth/"];
+
+// GUEST_OPS_ENABLED=true の時、ログイン不要で通す path/prefix。
+// 読み取り専用の運用ダッシュボード用（Issues / Logs / Uptime / Probe / Refresh）。
+const GUEST_OPS_BYPASS_PATHS = ["/admin/ops"];
+const GUEST_OPS_BYPASS_PREFIXES = [
+  "/admin/ops/",
+  "/api/admin/ops/",
+  "/api/admin/sentry/",
+];
+
 const STATIC_ASSET_PATTERN =
   /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|woff|woff2|ttf|otf)$/i;
 
@@ -29,6 +39,17 @@ function isProtected(pathname: string) {
 
 function isPortalClosed() {
   return process.env.PORTAL_CLOSED === "true";
+}
+
+function isGuestOpsEnabled() {
+  return process.env.GUEST_OPS_ENABLED === "true";
+}
+
+function isGuestOpsBypassPath(pathname: string) {
+  return (
+    GUEST_OPS_BYPASS_PATHS.includes(pathname) ||
+    GUEST_OPS_BYPASS_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  );
 }
 
 function isClosedModeBypassPath(pathname: string) {
@@ -70,6 +91,13 @@ function createRedirectUrl(request: NextRequest, pathname: string) {
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const closed = isPortalClosed();
+  const guestOps = isGuestOpsEnabled();
+
+  // ゲスト OPS 有効時、/admin/ops と監視系 API はログイン不要で素通り。
+  // 具体的な認可は各 route / layout 側の withOwnerOrGuest / isOwnerOrGuestAllowed で実施する。
+  if (guestOps && isGuestOpsBypassPath(pathname)) {
+    return NextResponse.next({ request });
+  }
 
   if (closed && pathname.startsWith("/api/public/")) {
     return createPublicApiClosedResponse();

@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { isGuestOpsEnabled } from "@/lib/auth/owner-email";
 
 export const metadata: Metadata = {
   title: "境界設計室ポータル - 準備中",
   description: "境界設計室ポータルは現在公開準備中です。",
 };
 
+// env を reflect するため SSR 毎回評価する
+export const dynamic = "force-dynamic";
+
 export default function ComingSoonPage() {
+  const guestOpsEnabled = isGuestOpsEnabled();
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-bg-primary">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.14),_transparent_28%),radial-gradient(circle_at_85%_18%,_rgba(8,145,178,0.16),_transparent_22%),linear-gradient(180deg,_rgba(15,23,42,1),_rgba(2,6,23,1))]" />
@@ -27,6 +34,23 @@ export default function ComingSoonPage() {
                 <br />
                 公開までしばらくお待ちください。
               </p>
+
+              {guestOpsEnabled ? (
+                <div className="mt-8">
+                  <Link
+                    href="/admin/ops"
+                    className="inline-flex items-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-500/10 px-5 py-2.5 text-sm font-medium text-cyan-100 transition hover:border-cyan-300/70 hover:bg-cyan-500/20"
+                  >
+                    ゲストとして閲覧する
+                    <span aria-hidden className="text-cyan-300">
+                      →
+                    </span>
+                  </Link>
+                  <p className="mt-3 text-xs text-slate-400">
+                    運用ダッシュボード（Issues / Logs / Uptime）を閲覧専用でご覧いただけます。
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex justify-start lg:justify-end">

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAuth } from "@/lib/auth/with-auth";
-import { isOwnerEmail } from "@/lib/auth/owner-email";
+import { withOwnerOrGuest } from "@/lib/auth/with-auth";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 import { findTarget, probeAndRecord } from "@/lib/health-poller";
 import { parseCertTargets, runCertCheckOnce } from "@/lib/cert-checker";
@@ -12,13 +11,13 @@ import { parseCertTargets, runCertCheckOnce } from "@/lib/cert-checker";
  * service が `cert:<host>` 形式 → CERT_CHECK_TARGETS に入っている host なら cert check 即実行。
  * それ以外 → HEALTH_CHECK_TARGETS から該当 service を引き、即座に fetch → INSERT → evaluateAndAlert。
  * レスポンスに 1 件分の check record を返す。
+ *
+ * GUEST_OPS_ENABLED=true の時はゲストも probe を叩ける（read-only 観測目的、INSERT 自体は
+ * 元々 server 側 service_role key で行われるため、ゲストから追加権限は漏れない）。
  */
 export const POST = withRateLimit(
   { max: 5, windowMs: 60_000, scope: "admin-ops-probe" },
-  withAuth(async (request, { user }) => {
-    if (!isOwnerEmail(user.email)) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
+  withOwnerOrGuest(async (request) => {
 
     const url = new URL(request.url);
     let service = url.searchParams.get("service") ?? "";
