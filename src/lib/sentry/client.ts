@@ -1,6 +1,8 @@
 const SENTRY_API_BASE = "https://sentry.io/api/0";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+export type SentryService = "boundary" | "rezona";
+
 export type SentryIssue = {
   id: string;
   shortId: string;
@@ -36,6 +38,27 @@ export type SentryIssueDetail = SentryIssue & {
   latestEvent: SentryEvent | null;
 };
 
+export type SentryLogEvent = {
+  id: string;
+  eventID: string;
+  dateCreated: string;
+  message: string | null;
+  title: string;
+  level?: string;
+  location: string | null;
+  culprit: string | null;
+  platform: string;
+  groupID: string | null;
+  tags: Array<{ key: string; value: string }>;
+};
+
+type ServiceConfig = {
+  token: string;
+  org: string;
+  /** 監視対象プロジェクト slug 一覧 (Issues/Events 取得はこの配列を合成する) */
+  projects: string[];
+};
+
 type CacheEntry<T> = { at: number; data: T };
 const cache = new Map<string, CacheEntry<unknown>>();
 
@@ -53,17 +76,45 @@ function setCached<T>(key: string, data: T): void {
   cache.set(key, { at: Date.now(), data });
 }
 
-function getConfig() {
-  const token = process.env.SENTRY_AUTH_TOKEN;
-  const org = process.env.SENTRY_ORG ?? "shuu-dw";
-  if (!token) {
-    throw new Error("SENTRY_AUTH_TOKEN is not set");
+/**
+ * service ごとの Sentry 接続設定を返す。
+ *
+ * - boundary: 既存の SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_SERVER_PROJECT / SENTRY_WEB_PROJECT を使用
+ * - rezona: SENTRY_REZONA_* を優先。未設定なら共通 env にフォールバック。
+ *           それでも project が無ければ null を返し、呼び出し側で空配列フォールバック。
+ *
+ * 返り値が null の場合は「未設定 → 監視対象外」として扱う。
+ */
+export function getServiceConfig(service: SentryService = "boundary"): ServiceConfig | null {
+  if (service === "boundary") {
+    const token = process.env.SENTRY_AUTH_TOKEN;
+    const org = process.env.SENTRY_ORG ?? "shuu-dw";
+    if (!token) return null;
+    const serverProject = process.env.SENTRY_SERVER_PROJECT ?? "boundary-metaverse-server";
+    const webProject = process.env.SENTRY_WEB_PROJECT ?? "boundary-metaverse-web";
+    const projects = [serverProject, webProject].filter(Boolean);
+    if (projects.length === 0) return null;
+    return { token, org, projects };
   }
-  return { token, org };
+
+  // service === "rezona"
+  const token = process.env.SENTRY_REZONA_AUTH_TOKEN ?? process.env.SENTRY_AUTH_TOKEN;
+  const org = process.env.SENTRY_REZONA_ORG ?? process.env.SENTRY_ORG ?? "shuu-dw";
+  const raw = process.env.SENTRY_REZONA_PROJECTS ?? "";
+  const projects = raw
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!token) return null;
+  if (projects.length === 0) return null;
+  return { token, org, projects };
 }
 
-async function sentryFetch<T>(path: string): Promise<T> {
-  const { token } = getConfig();
+export function isServiceConfigured(service: SentryService): boolean {
+  return getServiceConfig(service) !== null;
+}
+
+async function sentryFetch<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${SENTRY_API_BASE}${path}`, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -82,13 +133,21 @@ async function sentryFetch<T>(path: string): Promise<T> {
 
 export async function listIssues(
   projectSlug: string,
-  opts: { query?: string; limit?: number; statsPeriod?: string } = {},
+  opts: {
+    query?: string;
+    limit?: number;
+    statsPeriod?: string;
+    service?: SentryService;
+  } = {},
 ): Promise<SentryIssue[]> {
-  const { org } = getConfig();
+  const service = opts.service ?? "boundary";
+  const config = getServiceConfig(service);
+  if (!config) return [];
+
   const limit = opts.limit ?? 25;
   const query = opts.query ?? "is:unresolved";
   const statsPeriod = opts.statsPeriod ?? "24h";
-  const cacheKey = `issues:${org}:${projectSlug}:${query}:${limit}:${statsPeriod}`;
+  const cacheKey = `issues:${service}:${config.org}:${projectSlug}:${query}:${limit}:${statsPeriod}`;
   const cached = getCached<SentryIssue[]>(cacheKey);
   if (cached) return cached;
 
@@ -99,7 +158,8 @@ export async function listIssues(
     statsPeriod,
   });
   const data = await sentryFetch<SentryIssue[]>(
-    `/projects/${org}/${projectSlug}/issues/?${params.toString()}`,
+    `/projects/${config.org}/${projectSlug}/issues/?${params.toString()}`,
+    config.token,
   );
   setCached(cacheKey, data);
   return data;
@@ -110,36 +170,22 @@ export async function listIssues(
  *
  * Phase 1 (monitoring) の Logs タブ用。
  * pino-sentry-transport 経由で届く warn/error ログは Sentry 上では Message event として
- * 保存される。厳密な "Logs" データセットは Sentry の新機能（experimental）だが、
- * Phase 1 では既存の `/projects/{org}/{slug}/events/` を level フィルタで叩いて
- * Message ベースのイベントだけを timeline 表示する。
- *
- * Sentry の Events API は Issues とは別に「各発生イベント」を返すため、
- * 同じ issue でも発生毎に 1 行表示できる（=log 的）。
- *
- * 参考: GET /api/0/projects/{org}/{slug}/events/ は stable な endpoint。
+ * 保存される。
  */
-export type SentryLogEvent = {
-  id: string;
-  eventID: string;
-  dateCreated: string;
-  message: string | null;
-  title: string;
-  level?: string;
-  location: string | null;
-  culprit: string | null;
-  platform: string;
-  groupID: string | null;
-  tags: Array<{ key: string; value: string }>;
-};
-
 export async function listEvents(
   projectSlug: string,
-  opts: { level?: "warning" | "error"; limit?: number } = {},
+  opts: {
+    level?: "warning" | "error";
+    limit?: number;
+    service?: SentryService;
+  } = {},
 ): Promise<SentryLogEvent[]> {
-  const { org } = getConfig();
+  const service = opts.service ?? "boundary";
+  const config = getServiceConfig(service);
+  if (!config) return [];
+
   const limit = opts.limit ?? 50;
-  const cacheKey = `events:${org}:${projectSlug}:${opts.level ?? "all"}:${limit}`;
+  const cacheKey = `events:${service}:${config.org}:${projectSlug}:${opts.level ?? "all"}:${limit}`;
   const cached = getCached<SentryLogEvent[]>(cacheKey);
   if (cached) return cached;
 
@@ -148,7 +194,8 @@ export async function listEvents(
     full: "true",
   });
   const raw = await sentryFetch<SentryLogEvent[]>(
-    `/projects/${org}/${projectSlug}/events/?${params.toString()}`,
+    `/projects/${config.org}/${projectSlug}/events/?${params.toString()}`,
+    config.token,
   );
   const allowed: ReadonlySet<string> = opts.level
     ? new Set([opts.level])
@@ -162,23 +209,29 @@ export async function listEvents(
     .filter((e) => typeof e.level === "string" && allowed.has(e.level))
     .slice(0, limit);
   if (raw.length > 0 && filtered.length === 0) {
-    // eslint-disable-next-line no-console
     console.warn(
-      `[sentry] listEvents: ${projectSlug} raw=${raw.length} filtered=0, sample.level=${normalized[0]?.level ?? "undef"} sample.tags=${JSON.stringify(normalized[0]?.tags?.slice(0, 3) ?? [])}`,
+      `[sentry] listEvents: ${service}/${projectSlug} raw=${raw.length} filtered=0, sample.level=${normalized[0]?.level ?? "undef"} sample.tags=${JSON.stringify(normalized[0]?.tags?.slice(0, 3) ?? [])}`,
     );
   }
   setCached(cacheKey, filtered);
   return filtered;
 }
 
-export async function getIssue(issueId: string): Promise<SentryIssueDetail> {
-  const cacheKey = `issue:${issueId}`;
+export async function getIssue(
+  issueId: string,
+  opts: { service?: SentryService } = {},
+): Promise<SentryIssueDetail | null> {
+  const service = opts.service ?? "boundary";
+  const config = getServiceConfig(service);
+  if (!config) return null;
+
+  const cacheKey = `issue:${service}:${issueId}`;
   const cached = getCached<SentryIssueDetail>(cacheKey);
   if (cached) return cached;
 
   const [issue, latestEvent] = await Promise.all([
-    sentryFetch<SentryIssue>(`/issues/${issueId}/`),
-    sentryFetch<SentryEvent>(`/issues/${issueId}/events/latest/`).catch(() => null),
+    sentryFetch<SentryIssue>(`/issues/${issueId}/`, config.token),
+    sentryFetch<SentryEvent>(`/issues/${issueId}/events/latest/`, config.token).catch(() => null),
   ]);
 
   const detail: SentryIssueDetail = { ...issue, latestEvent };
