@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAuth } from "@/lib/auth/with-auth";
-import { isOwnerEmail } from "@/lib/auth/owner-email";
+import { withOwnerOrGuest } from "@/lib/auth/with-auth";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 import {
   getServiceConfig,
@@ -42,11 +41,7 @@ function projectTagFor(service: SentryService, projectSlug: string, index: numbe
 
 export const GET = withRateLimit(
   { max: 10, windowMs: 60_000, scope: "admin-sentry-events" },
-  withAuth(async (request, { user }) => {
-    if (!isOwnerEmail(user.email)) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
-
+  withOwnerOrGuest(async (request) => {
     const url = new URL(request.url);
     const level = parseLevel(url);
     const service = parseService(url);

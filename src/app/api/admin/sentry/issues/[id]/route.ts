@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAuth } from "@/lib/auth/with-auth";
-import { isOwnerEmail } from "@/lib/auth/owner-email";
+import { withOwnerOrGuest } from "@/lib/auth/with-auth";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 import { getIssue, getServiceConfig, type SentryService } from "@/lib/sentry/client";
 
@@ -13,11 +12,7 @@ function parseService(url: URL): SentryService | null {
 
 export const GET = withRateLimit(
   { max: 20, windowMs: 60_000, scope: "admin-sentry-issue-detail" },
-  withAuth<{ id: string }>(async (request, { user, params }) => {
-    if (!isOwnerEmail(user.email)) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
-
+  withOwnerOrGuest<{ id: string }>(async (request, { params }) => {
     const url = new URL(request.url);
     const service = parseService(url);
     if (service === null) {

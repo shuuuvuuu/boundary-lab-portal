@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { withAuth } from "@/lib/auth/with-auth";
-import { isOwnerEmail } from "@/lib/auth/owner-email";
+import { withOwnerOrGuest } from "@/lib/auth/with-auth";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 import { parseTargets } from "@/lib/health-poller";
 import { parseCertTargets } from "@/lib/cert-checker";
@@ -87,11 +86,7 @@ function computeSummary(rows: CheckRow[]): Summary {
 
 export const GET = withRateLimit(
   { max: 30, windowMs: 60_000, scope: "admin-ops-uptime" },
-  withAuth(async (request, { user }) => {
-    if (!isOwnerEmail(user.email)) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
-
+  withOwnerOrGuest(async (request) => {
     const url = new URL(request.url);
     const service = parseService(url);
     if (!service) {
