@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+export type SentryServiceKey = "boundary" | "rezona";
+
 type IssueListItem = {
   id: string;
   shortId: string;
@@ -15,12 +17,15 @@ type IssueListItem = {
   count: string;
   project: { slug: string; name: string };
   metadata: { type?: string; value?: string } | null;
-  _projectTag: "server" | "web";
+  _projectTag: string;
+  _service: SentryServiceKey;
 };
 
 type IssueEntry = { type: string; data: unknown };
 
-type IssueDetail = IssueListItem & {
+type IssueDetail = Omit<IssueListItem, "_projectTag" | "_service"> & {
+  _projectTag?: string;
+  _service?: SentryServiceKey;
   latestEvent: {
     eventID: string;
     dateCreated: string;
@@ -35,7 +40,7 @@ type IssueDetail = IssueListItem & {
 type FetchListState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; issues: IssueListItem[]; loadedAt: number }
+  | { kind: "ready"; issues: IssueListItem[]; loadedAt: number; configured: boolean }
   | { kind: "error"; message: string };
 
 type FetchDetailState =
@@ -69,16 +74,18 @@ function levelBadgeClass(level: string): string {
   }
 }
 
-function projectTagClass(tag: "server" | "web"): string {
-  return tag === "server"
-    ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
-    : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+function projectTagClass(tag: string): string {
+  if (tag === "server")
+    return "bg-indigo-500/20 text-indigo-300 border-indigo-500/30";
+  if (tag === "web")
+    return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+  return "bg-slate-600/20 text-slate-300 border-slate-500/30";
 }
 
 function buildClaudeContext(detail: IssueDetail): string {
   const lines: string[] = [
     `# Sentry Issue: ${detail.title}`,
-    `- Project: ${detail._projectTag} (${detail.project.slug})`,
+    `- Project: ${detail._projectTag ?? detail.project.slug} (${detail.project.slug})`,
     `- Level: ${detail.level}`,
     `- Count: ${detail.count}`,
     `- First seen: ${detail.firstSeen}`,
@@ -104,7 +111,7 @@ function buildClaudeContext(detail: IssueDetail): string {
   return lines.join("\n");
 }
 
-export function IssuesClient() {
+export function IssuesClient({ service }: { service: SentryServiceKey }) {
   const [listState, setListState] = useState<FetchListState>({ kind: "idle" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<FetchDetailState>({ kind: "idle" });
@@ -114,14 +121,24 @@ export function IssuesClient() {
   const fetchList = useCallback(async () => {
     setListState({ kind: "loading" });
     try {
-      const res = await fetch("/api/admin/sentry/issues", { cache: "no-store" });
+      const res = await fetch(`/api/admin/sentry/issues?service=${service}`, {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { issues: IssueListItem[] };
-      setListState({ kind: "ready", issues: json.issues, loadedAt: Date.now() });
+      const json = (await res.json()) as {
+        issues: IssueListItem[];
+        configured?: boolean;
+      };
+      setListState({
+        kind: "ready",
+        issues: json.issues,
+        loadedAt: Date.now(),
+        configured: json.configured !== false,
+      });
     } catch (err) {
       setListState({ kind: "error", message: err instanceof Error ? err.message : "unknown error" });
     }
-  }, []);
+  }, [service]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -147,22 +164,35 @@ export function IssuesClient() {
     }
   }, [fetchList, refreshing]);
 
-  const fetchDetail = useCallback(async (id: string) => {
-    setDetailState({ kind: "loading", id });
-    try {
-      const res = await fetch(`/api/admin/sentry/issues/${encodeURIComponent(id)}`, {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { issue: IssueDetail };
-      setDetailState({ kind: "ready", detail: json.issue });
-    } catch (err) {
-      setDetailState({
-        kind: "error",
-        message: err instanceof Error ? err.message : "unknown error",
-      });
-    }
-  }, []);
+  const fetchDetail = useCallback(
+    async (id: string) => {
+      setDetailState({ kind: "loading", id });
+      try {
+        const res = await fetch(
+          `/api/admin/sentry/issues/${encodeURIComponent(id)}?service=${service}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as { issue: IssueDetail | null };
+        if (!json.issue) {
+          setDetailState({ kind: "error", message: "Issue 詳細が取得できません" });
+          return;
+        }
+        setDetailState({ kind: "ready", detail: json.issue });
+      } catch (err) {
+        setDetailState({
+          kind: "error",
+          message: err instanceof Error ? err.message : "unknown error",
+        });
+      }
+    },
+    [service],
+  );
+
+  useEffect(() => {
+    // service が変わったら選択も解除
+    setSelectedId(null);
+  }, [service]);
 
   useEffect(() => {
     fetchList();
@@ -212,7 +242,12 @@ export function IssuesClient() {
           {listState.kind === "error" && (
             <p className="px-4 py-6 text-sm text-red-300">エラー: {listState.message}</p>
           )}
-          {listState.kind === "ready" && issues.length === 0 && (
+          {listState.kind === "ready" && !listState.configured && (
+            <p className="px-4 py-6 text-sm text-amber-300">
+              {service} の Sentry 連携は未設定です（env に SENTRY_REZONA_* 等を設定してください）
+            </p>
+          )}
+          {listState.kind === "ready" && listState.configured && issues.length === 0 && (
             <p className="px-4 py-6 text-sm text-slate-400">未解決 Issue はありません</p>
           )}
           {issues.map((issue) => {
@@ -295,8 +330,12 @@ function DetailView({
         <h3 className="text-base font-semibold text-slate-100">{detail.title}</h3>
         {detail.culprit && <p className="text-sm text-slate-400">{detail.culprit}</p>}
         <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-          <span className={`rounded border px-1.5 py-0.5 ${projectTagClass(detail._projectTag)}`}>
-            {detail._projectTag}
+          <span
+            className={`rounded border px-1.5 py-0.5 ${projectTagClass(
+              detail._projectTag ?? detail.project.slug,
+            )}`}
+          >
+            {detail._projectTag ?? detail.project.slug}
           </span>
           <span className={`rounded border px-1.5 py-0.5 ${levelBadgeClass(detail.level)}`}>
             {detail.level}

@@ -2,24 +2,42 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/with-auth";
 import { isOwnerEmail } from "@/lib/auth/owner-email";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
-import { listEvents, type SentryLogEvent } from "@/lib/sentry/client";
-
-const SERVER_PROJECT = process.env.SENTRY_SERVER_PROJECT ?? "boundary-metaverse-server";
-const WEB_PROJECT = process.env.SENTRY_WEB_PROJECT ?? "boundary-metaverse-web";
+import {
+  getServiceConfig,
+  listEvents,
+  type SentryLogEvent,
+  type SentryService,
+} from "@/lib/sentry/client";
 
 /**
- * GET /api/admin/sentry/events?level=warning|error
+ * GET /api/admin/sentry/events?level=warning|error&service=boundary|rezona
  *
  * Phase 1 (monitoring) Logs タブ用。
  * pino-sentry-transport 経由で送信された warn/error ログを Event 単位で返す。
  * level 指定が無い場合は warning/error/fatal を全て対象とする。
  */
-type EventWithProjectTag = SentryLogEvent & { _projectTag: "server" | "web" };
+type EventWithProjectTag = SentryLogEvent & { _projectTag: string; _service: SentryService };
 
 function parseLevel(url: URL): "warning" | "error" | undefined {
   const raw = url.searchParams.get("level");
   if (raw === "warning" || raw === "error") return raw;
   return undefined;
+}
+
+function parseService(url: URL): SentryService | null {
+  const raw = url.searchParams.get("service");
+  if (raw === null || raw === "") return "boundary";
+  if (raw === "boundary" || raw === "rezona") return raw;
+  return null;
+}
+
+function projectTagFor(service: SentryService, projectSlug: string, index: number): string {
+  if (service === "boundary") {
+    return index === 0 ? "server" : "web";
+  }
+  if (index === 0) return "server";
+  if (index === 1) return "web";
+  return projectSlug;
 }
 
 export const GET = withRateLimit(
@@ -31,25 +49,49 @@ export const GET = withRateLimit(
 
     const url = new URL(request.url);
     const level = parseLevel(url);
+    const service = parseService(url);
+    if (service === null) {
+      return NextResponse.json(
+        { error: "invalid service (must be 'boundary' or 'rezona')" },
+        { status: 400 },
+      );
+    }
+
+    const config = getServiceConfig(service);
+    if (!config) {
+      return NextResponse.json({
+        events: [],
+        level: level ?? "all",
+        service,
+        configured: false,
+      });
+    }
 
     try {
-      const [serverEvents, webEvents] = await Promise.all([
-        listEvents(SERVER_PROJECT, { level }).catch((err: Error) => {
-          console.error("[sentry] server events failed:", err.message);
-          return [] as SentryLogEvent[];
-        }),
-        listEvents(WEB_PROJECT, { level }).catch((err: Error) => {
-          console.error("[sentry] web events failed:", err.message);
-          return [] as SentryLogEvent[];
-        }),
-      ]);
+      const results = await Promise.all(
+        config.projects.map((slug) =>
+          listEvents(slug, { level, service }).catch((err: Error) => {
+            console.error(`[sentry] ${service}/${slug} events failed:`, err.message);
+            return [] as SentryLogEvent[];
+          }),
+        ),
+      );
 
-      const merged: EventWithProjectTag[] = [
-        ...serverEvents.map((e) => ({ ...e, _projectTag: "server" as const })),
-        ...webEvents.map((e) => ({ ...e, _projectTag: "web" as const })),
-      ].sort((a, b) => (a.dateCreated < b.dateCreated ? 1 : -1));
+      const merged: EventWithProjectTag[] = [];
+      config.projects.forEach((slug, idx) => {
+        const tag = projectTagFor(service, slug, idx);
+        for (const event of results[idx] ?? []) {
+          merged.push({ ...event, _projectTag: tag, _service: service });
+        }
+      });
+      merged.sort((a, b) => (a.dateCreated < b.dateCreated ? 1 : -1));
 
-      return NextResponse.json({ events: merged, level: level ?? "all" });
+      return NextResponse.json({
+        events: merged,
+        level: level ?? "all",
+        service,
+        configured: true,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "unknown error";
       return NextResponse.json({ error: message }, { status: 500 });

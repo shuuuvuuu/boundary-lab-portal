@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import type { SentryServiceKey } from "./IssuesClient";
+
 type LogEventItem = {
   id: string;
   eventID: string;
@@ -14,13 +16,20 @@ type LogEventItem = {
   platform: string;
   groupID: string | null;
   tags: Array<{ key: string; value: string }>;
-  _projectTag: "server" | "web";
+  _projectTag: string;
+  _service: SentryServiceKey;
 };
 
 type FetchState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; events: LogEventItem[]; level: string; loadedAt: number }
+  | {
+      kind: "ready";
+      events: LogEventItem[];
+      level: string;
+      loadedAt: number;
+      configured: boolean;
+    }
   | { kind: "error"; message: string };
 
 type LevelFilter = "all" | "warning" | "error";
@@ -45,10 +54,12 @@ function levelBadgeClass(level: string | undefined): string {
   return "bg-slate-600/20 text-slate-300 border-slate-500/30";
 }
 
-function projectTagClass(tag: "server" | "web"): string {
-  return tag === "server"
-    ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
-    : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+function projectTagClass(tag: string): string {
+  if (tag === "server")
+    return "bg-indigo-500/20 text-indigo-300 border-indigo-500/30";
+  if (tag === "web")
+    return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+  return "bg-slate-600/20 text-slate-300 border-slate-500/30";
 }
 
 function findTag(event: LogEventItem, key: string): string | null {
@@ -81,32 +92,44 @@ function buildClaudeContext(event: LogEventItem): string {
   return lines.join("\n");
 }
 
-export function LogsClient() {
+export function LogsClient({ service }: { service: SentryServiceKey }) {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [level, setLevel] = useState<LevelFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [copyHint, setCopyHint] = useState<string | null>(null);
 
-  const fetchEvents = useCallback(async (filter: LevelFilter) => {
-    setState({ kind: "loading" });
-    try {
-      const qs = filter === "all" ? "" : `?level=${filter}`;
-      const res = await fetch(`/api/admin/sentry/events${qs}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { events: LogEventItem[]; level: string };
-      setState({
-        kind: "ready",
-        events: json.events,
-        level: json.level,
-        loadedAt: Date.now(),
-      });
-    } catch (err) {
-      setState({
-        kind: "error",
-        message: err instanceof Error ? err.message : "unknown error",
-      });
-    }
-  }, []);
+  const fetchEvents = useCallback(
+    async (filter: LevelFilter) => {
+      setState({ kind: "loading" });
+      try {
+        const params = new URLSearchParams();
+        if (filter !== "all") params.set("level", filter);
+        params.set("service", service);
+        const res = await fetch(`/api/admin/sentry/events?${params.toString()}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as {
+          events: LogEventItem[];
+          level: string;
+          configured?: boolean;
+        };
+        setState({
+          kind: "ready",
+          events: json.events,
+          level: json.level,
+          loadedAt: Date.now(),
+          configured: json.configured !== false,
+        });
+      } catch (err) {
+        setState({
+          kind: "error",
+          message: err instanceof Error ? err.message : "unknown error",
+        });
+      }
+    },
+    [service],
+  );
 
   useEffect(() => {
     fetchEvents(level);
@@ -187,7 +210,12 @@ export function LogsClient() {
         {state.kind === "error" && (
           <p className="px-4 py-6 text-sm text-red-300">エラー: {state.message}</p>
         )}
-        {state.kind === "ready" && events.length === 0 && (
+        {state.kind === "ready" && !state.configured && (
+          <p className="px-4 py-6 text-sm text-amber-300">
+            {service} の Sentry 連携は未設定です（env に SENTRY_REZONA_* 等を設定してください）
+          </p>
+        )}
+        {state.kind === "ready" && state.configured && events.length === 0 && (
           <p className="px-4 py-6 text-sm text-slate-400">
             該当する warn / error レベルのログはありません
           </p>
