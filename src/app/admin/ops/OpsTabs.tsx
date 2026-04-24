@@ -1,24 +1,39 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { IssuesClient } from "./IssuesClient";
+import { IssuesClient, type SentryServiceKey } from "./IssuesClient";
 import { LogsClient } from "./LogsClient";
+import { UptimeClient } from "./UptimeClient";
 
-type TabKey = "issues" | "logs";
+type TabKey = "issues" | "logs" | "uptime";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "issues", label: "未解決 Issues" },
   { key: "logs", label: "Logs" },
+  { key: "uptime", label: "Uptime" },
 ];
+
+const SENTRY_SERVICES: SentryServiceKey[] = ["boundary", "rezona"];
 
 function readInitialTab(): TabKey {
   if (typeof window === "undefined") return "issues";
   const url = new URL(window.location.href);
   const raw = url.searchParams.get("tab");
-  return raw === "logs" ? "logs" : "issues";
+  if (raw === "logs") return "logs";
+  if (raw === "uptime") return "uptime";
+  return "issues";
 }
 
-function writeTabToUrl(tab: TabKey): void {
+function readInitialService(fallback: SentryServiceKey): SentryServiceKey {
+  if (typeof window === "undefined") return fallback;
+  const url = new URL(window.location.href);
+  const raw = url.searchParams.get("service");
+  if (raw === "rezona") return "rezona";
+  if (raw === "boundary") return "boundary";
+  return fallback;
+}
+
+function writeQueryToUrl(tab: TabKey, service: SentryServiceKey): void {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
   if (tab === "issues") {
@@ -26,46 +41,94 @@ function writeTabToUrl(tab: TabKey): void {
   } else {
     url.searchParams.set("tab", tab);
   }
+  if (service === "boundary") {
+    url.searchParams.delete("service");
+  } else {
+    url.searchParams.set("service", service);
+  }
   window.history.replaceState(null, "", url.toString());
 }
 
-export function OpsTabs() {
+export function OpsTabs({
+  healthServices,
+  defaultHealthService,
+}: {
+  healthServices: string[];
+  defaultHealthService: string;
+}) {
   const [active, setActive] = useState<TabKey>("issues");
+  const [service, setService] = useState<SentryServiceKey>("boundary");
 
   // hydration 後に URL から初期値を反映（SSR 差を避ける）
   useEffect(() => {
     setActive(readInitialTab());
+    setService(readInitialService("boundary"));
   }, []);
 
-  const handleSelect = useCallback((key: TabKey) => {
+  useEffect(() => {
+    writeQueryToUrl(active, service);
+  }, [active, service]);
+
+  const handleSelectTab = useCallback((key: TabKey) => {
     setActive(key);
-    writeTabToUrl(key);
+  }, []);
+
+  const handleSelectService = useCallback((s: SentryServiceKey) => {
+    setService(s);
   }, []);
 
   return (
     <div className="space-y-4">
-      <nav className="flex gap-1 border-b border-slate-800">
-        {TABS.map((tab) => {
-          const isActive = tab.key === active;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => handleSelect(tab.key)}
-              className={`-mb-px border-b-2 px-4 py-2 text-sm transition ${
-                isActive
-                  ? "border-sky-400 text-slate-100"
-                  : "border-transparent text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
+      <nav className="flex flex-wrap items-center gap-3 border-b border-slate-800">
+        <div className="flex gap-1">
+          {TABS.map((tab) => {
+            const isActive = tab.key === active;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => handleSelectTab(tab.key)}
+                className={`-mb-px border-b-2 px-4 py-2 text-sm transition ${
+                  isActive
+                    ? "border-sky-400 text-slate-100"
+                    : "border-transparent text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Uptime タブは内部で service 選択を持つため、ここでは Sentry 用のみ表示 */}
+        {active !== "uptime" && (
+          <div className="ml-auto flex items-center gap-2 pb-1 text-xs text-slate-400">
+            <span>Sentry Service</span>
+            <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
+              {SENTRY_SERVICES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => handleSelectService(s)}
+                  className={`rounded px-2 py-1 transition ${
+                    service === s
+                      ? "bg-slate-700 text-slate-100"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </nav>
 
-      {active === "issues" && <IssuesClient />}
-      {active === "logs" && <LogsClient />}
+      {active === "issues" && <IssuesClient service={service} />}
+      {active === "logs" && <LogsClient service={service} />}
+      {active === "uptime" && (
+        <UptimeClient services={healthServices} defaultService={defaultHealthService} />
+      )}
     </div>
   );
 }
