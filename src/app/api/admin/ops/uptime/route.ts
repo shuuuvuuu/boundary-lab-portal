@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/auth/with-auth";
 import { isOwnerEmail } from "@/lib/auth/owner-email";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 import { parseTargets } from "@/lib/health-poller";
+import { parseCertTargets } from "@/lib/cert-checker";
 
 /**
  * GET /api/admin/ops/uptime?service=rezona&hours=24
@@ -34,8 +35,10 @@ function parseHours(url: URL): number {
 function parseService(url: URL): string | null {
   const raw = url.searchParams.get("service");
   if (!raw) return null;
-  // service 名は英数 / - / _ のみ許容
-  if (!/^[a-zA-Z0-9_-]+$/.test(raw)) return null;
+  // service 名は英数 / - / _ / `:` / `.` を許容（cert:<host> 形式に対応）。
+  // 長さも 120 文字で制限して巨大入力を弾く。
+  if (!/^[a-zA-Z0-9_.:-]+$/.test(raw)) return null;
+  if (raw.length > 120) return null;
   return raw;
 }
 
@@ -127,15 +130,36 @@ export const GET = withRateLimit(
     }
 
     const rows = (data as CheckRow[]) ?? [];
-    const targets = parseTargets(process.env.HEALTH_CHECK_TARGETS);
-    const configured = targets.find((t) => t.service === service);
+
+    // cert:<host> は CERT_CHECK_TARGETS から、それ以外は HEALTH_CHECK_TARGETS から引く。
+    let configured = false;
+    let endpoint: string | null = null;
+    let intervalSeconds: number | null = null;
+    if (service.startsWith("cert:")) {
+      const host = service.slice("cert:".length);
+      const hosts = parseCertTargets(process.env.CERT_CHECK_TARGETS);
+      if (hosts.includes(host)) {
+        configured = true;
+        endpoint = `${host}:443`;
+        const hours = Number(process.env.CERT_CHECK_INTERVAL_HOURS ?? "24") || 24;
+        intervalSeconds = Math.max(1, Math.floor(hours)) * 60 * 60;
+      }
+    } else {
+      const targets = parseTargets(process.env.HEALTH_CHECK_TARGETS);
+      const hit = targets.find((t) => t.service === service);
+      if (hit) {
+        configured = true;
+        endpoint = hit.url;
+        intervalSeconds = hit.intervalSeconds;
+      }
+    }
 
     return NextResponse.json({
       service,
       hours,
-      configured: Boolean(configured),
-      endpoint: configured?.url ?? null,
-      interval_seconds: configured?.intervalSeconds ?? null,
+      configured,
+      endpoint,
+      interval_seconds: intervalSeconds,
       checks: rows,
       summary: computeSummary(rows),
     });

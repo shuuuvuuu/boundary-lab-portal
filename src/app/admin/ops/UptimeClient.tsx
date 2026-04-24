@@ -13,6 +13,25 @@ type CheckRow = {
   checked_at: string;
 };
 
+function isCertService(service: string): boolean {
+  return service.startsWith("cert:");
+}
+
+function certHost(service: string): string {
+  return service.slice("cert:".length);
+}
+
+/**
+ * 証明書タブでは response_time_ms に「残日数」が入る。
+ * 30 日以下 → amber、7 日以下 → red。負値（期限切れ）は赤のまま。
+ */
+function certDaysTone(days: number | null): "good" | "warn" | "bad" {
+  if (days === null) return "bad";
+  if (days <= 7) return "bad";
+  if (days <= 30) return "warn";
+  return "good";
+}
+
 type Summary = {
   total: number;
   ok: number;
@@ -107,10 +126,13 @@ export function UptimeClient({
     setProbing(true);
     setHint(null);
     try {
-      const res = await fetch(`/api/admin/ops/probe?service=${service}`, {
-        method: "POST",
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/admin/ops/probe?service=${encodeURIComponent(service)}`,
+        {
+          method: "POST",
+          cache: "no-store",
+        },
+      );
       if (!res.ok) {
         const text = await res.text();
         setHint(`probe 失敗: HTTP ${res.status} ${text.slice(0, 120)}`);
@@ -128,6 +150,12 @@ export function UptimeClient({
 
   const data = state.kind === "ready" ? state.data : null;
   const checks = useMemo<CheckRow[]>(() => data?.checks ?? [], [data]);
+
+  const isCert = isCertService(service);
+  // cert:<host> は response_time_ms が「残日数」。最新 1 件を大きく表示する。
+  const latestCert = isCert ? checks[0] ?? null : null;
+  const latestCertDays =
+    latestCert?.response_time_ms !== undefined ? latestCert.response_time_ms : null;
 
   // 応答時間バーチャート用: 古い → 新しい の順に並べ、最大値で正規化
   const chartRows = useMemo(() => {
@@ -216,7 +244,35 @@ export function UptimeClient({
         </p>
       )}
 
-      {data && (
+      {data && isCert && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard
+            label={`${certHost(service)} 残り日数`}
+            value={latestCertDays !== null ? `${latestCertDays}` : "—"}
+            sub={latestCertDays !== null && latestCertDays < 0 ? "期限切れ" : "days until expiry"}
+            tone={certDaysTone(latestCertDays)}
+            emphasize
+          />
+          <SummaryCard
+            label="最終チェック"
+            value={formatRelative(latestCert?.checked_at ?? null)}
+            sub={latestCert?.checked_at ? formatJst(latestCert.checked_at) : ""}
+          />
+          <SummaryCard
+            label="状態"
+            value={latestCert?.ok ? "OK" : latestCert ? "要対応" : "—"}
+            sub={latestCert?.error_message ?? ""}
+            tone={latestCert?.ok ? "good" : "bad"}
+          />
+          <SummaryCard
+            label="チェック回数 (期間内)"
+            value={`${data.summary.total}`}
+            sub={`成功 ${data.summary.ok} / 失敗 ${data.summary.ng}`}
+          />
+        </div>
+      )}
+
+      {data && !isCert && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             label="稼働率"
@@ -244,7 +300,7 @@ export function UptimeClient({
         </div>
       )}
 
-      {data && checks.length > 0 && (
+      {data && !isCert && checks.length > 0 && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/40">
           <header className="border-b border-slate-800 px-4 py-3 text-sm font-medium">
             応答時間（左: 古 → 右: 新 / 赤: 失敗）
@@ -279,7 +335,7 @@ export function UptimeClient({
                 <tr>
                   <th className="px-3 py-2">時刻 (JST)</th>
                   <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">応答</th>
+                  <th className="px-3 py-2">{isCert ? "残り日数" : "応答"}</th>
                   <th className="px-3 py-2">Error</th>
                 </tr>
               </thead>
@@ -297,11 +353,21 @@ export function UptimeClient({
                             : "border-red-500/30 bg-red-500/10 text-red-300"
                         }`}
                       >
-                        {row.status_code ?? "ERR"}
+                        {isCert
+                          ? row.ok
+                            ? "OK"
+                            : "NG"
+                          : row.status_code ?? "ERR"}
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-slate-300">
-                      {row.response_time_ms !== null ? `${row.response_time_ms}ms` : "—"}
+                      {isCert
+                        ? row.response_time_ms !== null
+                          ? `${row.response_time_ms} 日`
+                          : "—"
+                        : row.response_time_ms !== null
+                          ? `${row.response_time_ms}ms`
+                          : "—"}
                     </td>
                     <td className="px-3 py-1.5 text-slate-400">
                       {row.error_message ?? ""}
@@ -322,11 +388,14 @@ function SummaryCard({
   value,
   sub,
   tone,
+  emphasize,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: "good" | "warn" | "bad";
+  /** cert 残日数のような重要メトリクスを大きく表示する */
+  emphasize?: boolean;
 }) {
   const toneClass =
     tone === "good"
@@ -336,10 +405,11 @@ function SummaryCard({
         : tone === "bad"
           ? "text-red-300"
           : "text-slate-100";
+  const valueSize = emphasize ? "text-4xl" : "text-xl";
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3">
       <div className="text-xs text-slate-400">{label}</div>
-      <div className={`mt-1 text-xl font-semibold ${toneClass}`}>{value}</div>
+      <div className={`mt-1 ${valueSize} font-semibold ${toneClass}`}>{value}</div>
       {sub && <div className="mt-1 truncate text-xs text-slate-500">{sub}</div>}
     </div>
   );
