@@ -52,9 +52,15 @@ function writeQueryToUrl(tab: TabKey, service: SentryServiceKey): void {
 export function OpsTabs({
   healthServices,
   defaultHealthService,
+  showSentryServiceSelector,
 }: {
   healthServices: string[];
   defaultHealthService: string;
+  /**
+   * Sentry の `service` セレクタ（boundary / rezona）を表示するか。
+   * rezona 用の env が未設定の時は false にして boundary 単一運用にする。
+   */
+  showSentryServiceSelector: boolean;
 }) {
   const [active, setActive] = useState<TabKey>("issues");
   const [service, setService] = useState<SentryServiceKey>("boundary");
@@ -62,8 +68,14 @@ export function OpsTabs({
   // hydration 後に URL から初期値を反映（SSR 差を避ける）
   useEffect(() => {
     setActive(readInitialTab());
-    setService(readInitialService("boundary"));
-  }, []);
+    // rezona env が無効化されている時は URL ?service=rezona が指定されても
+    // boundary に丸める（UI 混乱回避）。
+    if (showSentryServiceSelector) {
+      setService(readInitialService("boundary"));
+    } else {
+      setService("boundary");
+    }
+  }, [showSentryServiceSelector]);
 
   useEffect(() => {
     writeQueryToUrl(active, service);
@@ -100,8 +112,9 @@ export function OpsTabs({
           })}
         </div>
 
-        {/* Uptime タブは内部で service 選択を持つため、ここでは Sentry 用のみ表示 */}
-        {active !== "uptime" && (
+        {/* Uptime タブは内部で service 選択を持つため、ここでは Sentry 用のみ表示。
+            rezona 用 env が無い場合は boundary 単一運用なのでセレクタ自体を出さない。 */}
+        {active !== "uptime" && showSentryServiceSelector && (
           <div className="ml-auto flex items-center gap-2 pb-1 text-xs text-slate-400">
             <span>Sentry Service</span>
             <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
