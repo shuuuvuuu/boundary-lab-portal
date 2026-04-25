@@ -7,6 +7,7 @@ import { LogsClient } from "./LogsClient";
 import { MetricsClient } from "./MetricsClient";
 import { TracesClient } from "./TracesClient";
 import { UptimeClient } from "./UptimeClient";
+import { UsersClient } from "./UsersClient";
 import { WebVitalsClient } from "./WebVitalsClient";
 
 type TabKey =
@@ -16,6 +17,7 @@ type TabKey =
   | "web-vitals"
   | "activity"
   | "metrics"
+  | "users"
   | "uptime";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
@@ -25,6 +27,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "web-vitals", label: "Web Vitals" },
   { key: "activity", label: "Activity" },
   { key: "metrics", label: "Metrics" },
+  { key: "users", label: "Users" },
   { key: "uptime", label: "Uptime" },
 ];
 
@@ -39,6 +42,7 @@ function readInitialTab(): TabKey {
   if (raw === "web-vitals") return "web-vitals";
   if (raw === "activity") return "activity";
   if (raw === "metrics") return "metrics";
+  if (raw === "users") return "users";
   if (raw === "uptime") return "uptime";
   return "issues";
 }
@@ -136,6 +140,7 @@ export function OpsTabs({
         {active !== "uptime" &&
           active !== "activity" &&
           active !== "metrics" &&
+          active !== "users" &&
           showSentryServiceSelector && (
           <div className="ml-auto flex items-center gap-2 pb-1 text-xs text-slate-400">
             <span>Sentry Service</span>
@@ -165,6 +170,7 @@ export function OpsTabs({
       {active === "web-vitals" && <WebVitalsClient service={service} />}
       {active === "activity" && <ActivityClient />}
       {active === "metrics" && <MetricsClient />}
+      {active === "users" && <UsersClient />}
       {active === "uptime" && (
         <UptimeClient services={healthServices} defaultService={defaultHealthService} />
       )}
