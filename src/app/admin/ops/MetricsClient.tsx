@@ -50,7 +50,14 @@ type FetchState =
   | { kind: "ready"; server: ServerMetrics | null; rooms: RoomsMetrics | null }
   | { kind: "error"; message: string };
 
-const REFRESH_INTERVAL_MS = 5_000;
+type RefreshOption = "5s" | "60s" | "1h" | "24h" | "off";
+
+const REFRESH_INTERVAL_MAP: Record<Exclude<RefreshOption, "off">, number> = {
+  "5s": 5_000,
+  "60s": 60_000,
+  "1h": 60 * 60_000,
+  "24h": 24 * 60 * 60_000,
+};
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
@@ -92,7 +99,7 @@ function lagColorClass(p99: number): string {
 
 export function MetricsClient() {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refresh, setRefresh] = useState<RefreshOption>("5s");
 
   const fetchAll = async (): Promise<void> => {
     setState((prev) => (prev.kind === "ready" ? prev : { kind: "loading" }));
@@ -121,10 +128,11 @@ export function MetricsClient() {
 
   useEffect(() => {
     fetchAll();
-    if (!autoRefresh) return;
-    const t = setInterval(fetchAll, REFRESH_INTERVAL_MS);
+    if (refresh === "off") return;
+    const intervalMs = REFRESH_INTERVAL_MAP[refresh];
+    const t = setInterval(fetchAll, intervalMs);
     return () => clearInterval(t);
-  }, [autoRefresh]);
+  }, [refresh]);
 
   const memoryChartData = useMemo(() => {
     if (state.kind !== "ready" || !state.server) return [];
@@ -165,20 +173,40 @@ export function MetricsClient() {
         を 1 秒間隔・直近 60 秒で表示します。{" "}
         <strong className="text-slate-200">ルーム別の socket / LiveKit 参加者数</strong>
         も同時表示。OOM 前兆 (memory じわ漏れ) や socket.io 詰まり (event loop lag spike) を
-        異常 boot 前に検知することが目的です。5 秒間隔で自動再取得。
+        異常 boot 前に検知することが目的です。データ保持窓は server 側 60 秒固定で、
+        更新間隔は表示の頻度のみ変更します（5s / 60s / 1h / 24h / off）。
       </TabDescription>
 
       {/* 制御バー */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={autoRefresh}
-            onChange={(e) => setAutoRefresh(e.target.checked)}
-            className="accent-sky-400"
-          />
-          5 秒間隔で自動更新
-        </label>
+        <span>更新間隔:</span>
+        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
+          {(["5s", "60s", "1h", "24h", "off"] as const).map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setRefresh(opt)}
+              className={`rounded px-2 py-1 transition ${
+                refresh === opt
+                  ? "bg-slate-700 text-slate-100"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title={
+                opt === "off"
+                  ? "自動更新オフ。手動で再取得ボタンを押した時のみ取得"
+                  : opt === "5s"
+                    ? "リアルタイム監視向け（推奨）"
+                    : opt === "60s"
+                      ? "1 分置き。タブを開きっぱなしにしておく時"
+                      : opt === "1h"
+                        ? "1 時間置き。常時開きっぱなし時の負荷削減"
+                        : "24 時間置き。事実上手動相当（boundary-server のメモリ保持窓は 60 秒固定）"
+              }
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={fetchAll}
