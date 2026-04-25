@@ -217,6 +217,80 @@ export async function listEvents(
   return filtered;
 }
 
+export type SentryTransactionSummary = {
+  transaction: string;
+  project: string;
+  count: number;
+  avgDuration: number;
+  p50: number;
+  p95: number;
+  failureRate: number;
+};
+
+/**
+ * Sentry Discover (dataset=transactions) API で transaction 単位の性能サマリを取得する。
+ *
+ * Phase 2 (Traces タブ) 用。service/project ごとに p50 / p95 / count / failure_rate を
+ * transaction 名単位で集計する。Developer 無料プランでは transactions quota が
+ * 10K/月と厳しいため、画面側の表示で「該当期間に transaction が無い場合の説明文」を
+ * 必ず併記すること。
+ */
+export async function listTransactions(
+  projectSlug: string,
+  opts: {
+    limit?: number;
+    statsPeriod?: string;
+    service?: SentryService;
+  } = {},
+): Promise<SentryTransactionSummary[]> {
+  const service = opts.service ?? "boundary";
+  const config = getServiceConfig(service);
+  if (!config) return [];
+
+  const limit = opts.limit ?? 25;
+  const statsPeriod = opts.statsPeriod ?? "24h";
+  const cacheKey = `transactions:${service}:${config.org}:${projectSlug}:${limit}:${statsPeriod}`;
+  const cached = getCached<SentryTransactionSummary[]>(cacheKey);
+  if (cached) return cached;
+
+  const params = new URLSearchParams({
+    dataset: "transactions",
+    statsPeriod,
+    sort: "-count()",
+    per_page: String(limit),
+    query: `project:${projectSlug}`,
+  });
+  for (const f of [
+    "transaction",
+    "count()",
+    "avg(transaction.duration)",
+    "p50(transaction.duration)",
+    "p95(transaction.duration)",
+    "failure_rate()",
+  ]) {
+    params.append("field", f);
+  }
+
+  type Raw = { data?: Array<Record<string, string | number>> };
+  const raw = await sentryFetch<Raw>(
+    `/organizations/${config.org}/events/?${params.toString()}`,
+    config.token,
+  );
+
+  const summaries: SentryTransactionSummary[] = (raw.data ?? []).map((row) => ({
+    transaction: String(row.transaction ?? ""),
+    project: projectSlug,
+    count: Number(row["count()"] ?? 0),
+    avgDuration: Number(row["avg(transaction.duration)"] ?? 0),
+    p50: Number(row["p50(transaction.duration)"] ?? 0),
+    p95: Number(row["p95(transaction.duration)"] ?? 0),
+    failureRate: Number(row["failure_rate()"] ?? 0),
+  }));
+
+  setCached(cacheKey, summaries);
+  return summaries;
+}
+
 export async function getIssue(
   issueId: string,
   opts: { service?: SentryService } = {},
