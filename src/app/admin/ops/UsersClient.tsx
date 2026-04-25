@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import type { SentryServiceKey } from "./IssuesClient";
 import { TabDescription } from "./TabDescription";
 
 type LiveKitConn = {
@@ -146,11 +147,12 @@ export function UsersClient() {
   const [activityState, setActivityState] = useState<FetchActivityState>({ kind: "idle" });
   const [selected, setSelected] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [service, setService] = useState<SentryServiceKey>("boundary");
 
   const fetchUsers = useCallback(async () => {
     setUsersState((prev) => (prev.kind === "ready" ? prev : { kind: "loading" }));
     try {
-      const res = await fetch("/api/admin/metrics/server?type=users", {
+      const res = await fetch(`/api/admin/metrics/server?service=${service}&type=users`, {
         cache: "no-store",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -162,7 +164,7 @@ export function UsersClient() {
         message: err instanceof Error ? err.message : "unknown error",
       });
     }
-  }, []);
+  }, [service]);
 
   const fetchActivity = useCallback(async (userId: string) => {
     setActivityState({ kind: "loading" });
@@ -227,6 +229,26 @@ export function UsersClient() {
 
       {/* 制御バー */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span>service:</span>
+        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
+          {(["boundary", "rezona"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setService(s);
+                setSelected(null);
+              }}
+              className={`rounded px-2 py-1 transition ${
+                service === s
+                  ? "bg-slate-700 text-slate-100"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
         <label className="flex items-center gap-1">
           <input
             type="checkbox"

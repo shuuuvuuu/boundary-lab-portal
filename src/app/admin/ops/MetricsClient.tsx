@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 
+import type { SentryServiceKey } from "./IssuesClient";
 import { TabDescription } from "./TabDescription";
 
 type ResourceSample = {
@@ -123,11 +124,12 @@ function lagColorClass(p99: number): string {
 export function MetricsClient() {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [refresh, setRefresh] = useState<RefreshOption>("5s");
+  const [service, setService] = useState<SentryServiceKey>("boundary");
 
   const fetchAll = async (): Promise<void> => {
     setState((prev) => (prev.kind === "ready" ? prev : { kind: "loading" }));
     try {
-      const res = await fetch("/api/admin/metrics/server?type=all", {
+      const res = await fetch(`/api/admin/metrics/server?service=${service}&type=all`, {
         cache: "no-store",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -157,7 +159,8 @@ export function MetricsClient() {
     const intervalMs = REFRESH_INTERVAL_MAP[refresh];
     const t = setInterval(fetchAll, intervalMs);
     return () => clearInterval(t);
-  }, [refresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, service]);
 
   const memoryChartData = useMemo(() => {
     if (state.kind !== "ready" || !state.server) return [];
@@ -205,6 +208,23 @@ export function MetricsClient() {
 
       {/* 制御バー */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span>service:</span>
+        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
+          {(["boundary", "rezona"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setService(s)}
+              className={`rounded px-2 py-1 transition ${
+                service === s
+                  ? "bg-slate-700 text-slate-100"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
         <span>更新間隔:</span>
         <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
           {(["5s", "60s", "1h", "24h", "off"] as const).map((opt) => (
