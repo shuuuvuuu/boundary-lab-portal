@@ -2,7 +2,9 @@
 
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
+# .npmrc には legacy-peer-deps=true が記載されている (recharts と React 19 RC の peer dep 競合のため)。
+# 単純な COPY package.json package-lock.json では .npmrc が拾われないので明示する。
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=optional
 
 FROM node:22-alpine AS builder
