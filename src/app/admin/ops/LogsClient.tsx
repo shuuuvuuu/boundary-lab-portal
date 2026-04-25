@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { SentryServiceKey } from "./IssuesClient";
+import { TabDescription } from "./TabDescription";
 
 type LogEventItem = {
   id: string;
@@ -174,7 +175,14 @@ export function LogsClient({ service }: { service: SentryServiceKey }) {
   const events = state.kind === "ready" ? state.events : [];
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+    <div className="space-y-4">
+      <TabDescription>
+        サーバー側 `pino` ロガーが <strong className="text-slate-200">warn / error / fatal</strong> レベルで出力したログを
+        Sentry 経由で時系列表示します。Phase 2 の Option B により、worker_thread を介さず
+        main thread の Sentry を直接使うため `beforeSend` (PII scrub) が確実に適用されます。
+        各エントリの「Claude に聞く内容をコピー」で AI トリアージできます。
+      </TabDescription>
+      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
         <h2 className="font-medium">Logs (pino warn/error → Sentry)</h2>
         <div className="flex items-center gap-2">
@@ -283,6 +291,7 @@ export function LogsClient({ service }: { service: SentryServiceKey }) {
       </div>
 
       {copyHint && <p className="px-4 pb-3 text-xs text-emerald-300">{copyHint}</p>}
-    </section>
+      </section>
+    </div>
   );
 }

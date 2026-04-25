@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { SentryServiceKey } from "./IssuesClient";
+import { TabDescription } from "./TabDescription";
+import { TraceDetailPanel } from "./TraceDetailPanel";
+import { TracesChart } from "./TracesChart";
 
 type TransactionItem = {
   transaction: string;
@@ -70,6 +73,7 @@ export function TracesClient({ service }: { service: SentryServiceKey }) {
   const [period, setPeriod] = useState<PeriodOption>("24h");
   const [refreshing, setRefreshing] = useState(false);
   const [copyHint, setCopyHint] = useState<string | null>(null);
+  const [selected, setSelected] = useState<{ projectTag: string; transaction: string } | null>(null);
 
   const fetchTransactions = useCallback(
     async (statsPeriod: PeriodOption) => {
@@ -135,7 +139,16 @@ export function TracesClient({ service }: { service: SentryServiceKey }) {
   const transactions = state.kind === "ready" ? state.transactions : [];
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+    <div className="space-y-4">
+      <TabDescription>
+        API・socket.io イベント・SPA ページロードの <strong className="text-slate-200">transaction 単位での性能サマリ</strong>
+        （実行回数、平均、p50、p95、失敗率）を表示します。期間切替は 1h / 24h / 7d。
+        下のグラフは上位 5 transaction の時系列推移、表は同期間の集計値。
+        Developer 無料プランは spans 上限 10K/月のため、`SENTRY_TRACES_SAMPLE_RATE`
+        を低めに設定している場合は実数が少なく見えます。
+      </TabDescription>
+      <TracesChart service={service} statsPeriod={period} />
+      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
         <h2 className="font-medium">Traces (transaction サマリ)</h2>
         <div className="flex items-center gap-2">
@@ -202,8 +215,26 @@ export function TracesClient({ service }: { service: SentryServiceKey }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {transactions.map((tx, idx) => (
-                <tr key={`${tx._projectTag}-${tx.transaction}-${idx}`} className="hover:bg-slate-900/60">
+              {transactions.map((tx, idx) => {
+                const isSelected =
+                  selected !== null &&
+                  selected.projectTag === tx._projectTag &&
+                  selected.transaction === tx.transaction;
+                return (
+                <tr
+                  key={`${tx._projectTag}-${tx.transaction}-${idx}`}
+                  onClick={() =>
+                    setSelected(
+                      isSelected
+                        ? null
+                        : { projectTag: tx._projectTag, transaction: tx.transaction },
+                    )
+                  }
+                  className={`cursor-pointer ${
+                    isSelected ? "bg-slate-800/70" : "hover:bg-slate-900/60"
+                  }`}
+                  title="クリックで span tree を表示"
+                >
                   <td className="px-4 py-2">
                     <span
                       className={`inline-block rounded border px-1.5 py-0.5 text-xs ${projectTagClass(tx._projectTag)}`}
@@ -230,13 +261,24 @@ export function TracesClient({ service }: { service: SentryServiceKey }) {
                     {formatRate(tx.failureRate)}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       {copyHint && <p className="px-4 pb-3 text-xs text-emerald-300">{copyHint}</p>}
-    </section>
+      </section>
+      {selected && (
+        <TraceDetailPanel
+          service={service}
+          projectTag={selected.projectTag}
+          transaction={selected.transaction}
+          statsPeriod={period}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </div>
   );
 }
