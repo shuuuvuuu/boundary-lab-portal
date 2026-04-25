@@ -155,6 +155,16 @@ export function UsersClient() {
       const res = await fetch(`/api/admin/metrics/server?service=${service}&type=users`, {
         cache: "no-store",
       });
+      if (res.status === 503) {
+        const body = (await res.json()) as { configured?: boolean; error?: string };
+        if (body.configured === false) {
+          setUsersState({
+            kind: "error",
+            message: `${service} は portal 側で未設定です（${body.error ?? ""}）`,
+          });
+          return;
+        }
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as { data: UsersResponse };
       setUsersState({ kind: "ready", resp: json.data });

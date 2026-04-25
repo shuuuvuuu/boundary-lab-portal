@@ -132,6 +132,17 @@ export function MetricsClient() {
       const res = await fetch(`/api/admin/metrics/server?service=${service}&type=all`, {
         cache: "no-store",
       });
+      // 503 + configured: false は「未設定」として明示メッセージで扱う
+      if (res.status === 503) {
+        const body = (await res.json()) as { configured?: boolean; error?: string };
+        if (body.configured === false) {
+          setState({
+            kind: "error",
+            message: `${service} は portal 側で未設定です（${body.error ?? "REZONA_INTERNAL_URL / REZONA_INTERNAL_SECRET を /etc/boundary/.env に追加してください"}）`,
+          });
+          return;
+        }
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as {
         type: string;
