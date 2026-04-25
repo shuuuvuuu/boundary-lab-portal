@@ -23,6 +23,7 @@ const GUEST_OPS_BYPASS_PREFIXES = [
   "/api/admin/ops/",
   "/api/admin/sentry/",
   "/api/admin/activity", // Phase 2.2: Activity タブ用
+  "/api/admin/metrics/", // Phase 3: Metrics タブ用
 ];
 
 const STATIC_ASSET_PATTERN =
