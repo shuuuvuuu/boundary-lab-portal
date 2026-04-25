@@ -10,6 +10,12 @@ type LiveKitConn = {
   joined_at: number | null;
 };
 
+type SyncState = {
+  transport: string;
+  last_position_at: number | null;
+  position_count_total: number;
+};
+
 type UserSnapshot = {
   user_id: string;
   server_id: string;
@@ -18,6 +24,7 @@ type UserSnapshot = {
   world_ids: string[];
   connected_at: number | null;
   livekit: LiveKitConn[];
+  sync: SyncState;
 };
 
 type UsersResponse = {
@@ -82,6 +89,56 @@ function eventTypeBadge(type: string): string {
   if (type === "user_action") return "bg-sky-500/20 text-sky-300 border-sky-500/30";
   if (type === "api_request") return "bg-slate-600/20 text-slate-300 border-slate-500/30";
   return "bg-amber-500/20 text-amber-300 border-amber-500/30";
+}
+
+/**
+ * 位置同期の健全性を判定する。
+ *  - active: 直近 10 秒以内に position event が来ている = 同期動作中
+ *  - idle: 接続はあるが position が古い (10s〜2min) = ユーザーが操作していない（健全）
+ *  - silent: position が 2 分以上来ていない = サイレント切断疑い、要注意
+ *  - never: 一度も position event が来ていない = アバター同期未開始
+ */
+function classifySyncState(sync: SyncState, connectedAt: number | null): {
+  level: "active" | "idle" | "silent" | "never";
+  label: string;
+  className: string;
+} {
+  const now = Date.now();
+  if (!sync.last_position_at) {
+    // 接続したばかりなら "never" は健全 (まだ動かしていない)
+    if (connectedAt && now - connectedAt < 30_000) {
+      return {
+        level: "never",
+        label: "接続直後 (position 未送信)",
+        className: "text-slate-400 border-slate-700 bg-slate-800/30",
+      };
+    }
+    return {
+      level: "never",
+      label: "⚠️ position event 未到着",
+      className: "text-amber-300 border-amber-500/40 bg-amber-500/10",
+    };
+  }
+  const ago = now - sync.last_position_at;
+  if (ago < 10_000) {
+    return {
+      level: "active",
+      label: "同期中",
+      className: "text-emerald-300 border-emerald-500/40 bg-emerald-500/10",
+    };
+  }
+  if (ago < 120_000) {
+    return {
+      level: "idle",
+      label: "アイドル",
+      className: "text-slate-400 border-slate-700 bg-slate-800/30",
+    };
+  }
+  return {
+    level: "silent",
+    label: "⚠️ サイレント切断疑い",
+    className: "text-red-300 border-red-500/40 bg-red-500/10",
+  };
 }
 
 export function UsersClient() {
@@ -151,15 +208,21 @@ export function UsersClient() {
     <div className="space-y-4">
       <TabDescription>
         現在 <strong className="text-slate-200">socket.io / LiveKit に接続中の全ユーザー</strong>
-        を表示します。左の一覧から選ぶと、右に接続詳細（socket id、所属ワールド、LiveKit
-        publisher 状態）と直近 24h の Activity 履歴が表示されます。各レコードに
+        を表示します。各ユーザーについて、socket transport (websocket / polling)、所属 world、
+        <strong className="text-slate-200">アバター位置同期 (position event) の活動状況</strong>、
+        LiveKit voice publisher 状態、直近 24h の Activity 履歴を確認できます。
+        sync ラベルが <code className="rounded bg-slate-800 px-1 text-amber-300">never</code>
+        や <code className="rounded bg-slate-800 px-1 text-red-300">silent</code> のユーザーは
+        socket alive でも実質的に同期していない疑い。各レコードに
         <code className="mx-1 rounded bg-slate-800 px-1">server_id</code>
         を付与しているため、将来複数サーバー化した時に「どのサーバー所属か」も判別可能。
-        現在は単一サーバー
         {usersState.kind === "ready" && (
-          <code className="mx-1 rounded bg-slate-800 px-1">{usersState.resp.server_id}</code>
+          <>
+            現在は単一サーバー
+            <code className="mx-1 rounded bg-slate-800 px-1">{usersState.resp.server_id}</code>
+            運用中。
+          </>
         )}
-        運用中。
       </TabDescription>
 
       {/* 制御バー */}
@@ -243,6 +306,17 @@ export function UsersClient() {
                         voice × {u.livekit.length}
                       </span>
                     )}
+                    {(() => {
+                      const c = classifySyncState(u.sync, u.connected_at);
+                      return (
+                        <span
+                          className={`rounded border px-1 ${c.className}`}
+                          title={c.label}
+                        >
+                          sync {c.level}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </button>
               );
@@ -298,6 +372,50 @@ export function UsersClient() {
                     </span>
                   </div>
                 </div>
+
+                {/* アバター位置同期の状態 */}
+                {(() => {
+                  const sync = selectedUser.sync;
+                  const cls = classifySyncState(sync, selectedUser.connected_at);
+                  const lastAgo = sync.last_position_at
+                    ? formatRelative(sync.last_position_at)
+                    : "—";
+                  return (
+                    <div>
+                      <h4 className="mb-1 text-xs font-medium text-slate-300">
+                        アバター位置同期 (socket.io 'position' event)
+                      </h4>
+                      <div
+                        className={`rounded border px-3 py-2 text-xs ${cls.className}`}
+                      >
+                        <div className="font-medium">{cls.label}</div>
+                        <div className="mt-1 grid grid-cols-2 gap-y-0.5 text-[11px]">
+                          <span className="text-slate-500">transport:</span>
+                          <span className="font-mono">{sync.transport}</span>
+                          <span className="text-slate-500">last position event:</span>
+                          <span className="font-mono">{lastAgo}</span>
+                          <span className="text-slate-500">total position events:</span>
+                          <span className="font-mono tabular-nums">
+                            {sync.position_count_total.toLocaleString()}
+                          </span>
+                        </div>
+                        {cls.level === "never" && sync.last_position_at === null && (
+                          <p className="mt-1 text-[10px] opacity-80">
+                            socket は接続中 / world にも join 済だが、クライアントから position
+                            event が一度も送信されていない。クライアントのアバター送信ロジック未起動 /
+                            一時停止の可能性あり。
+                          </p>
+                        )}
+                        {cls.level === "silent" && (
+                          <p className="mt-1 text-[10px] opacity-80">
+                            2 分以上 position event が来ていない。socket は alive のままだが
+                            クライアント側でフリーズ・タブ非アクティブ化・サイレント切断が起きている疑い。
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {selectedUser.livekit.length > 0 && (
                   <div>
