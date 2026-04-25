@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { TabDescription } from "./TabDescription";
+
 export type SentryServiceKey = "boundary" | "rezona";
 
 type IssueListItem = {
@@ -111,17 +113,21 @@ function buildClaudeContext(detail: IssueDetail): string {
   return lines.join("\n");
 }
 
+type CategoryFilter = "all" | "error" | "performance";
+
 export function IssuesClient({ service }: { service: SentryServiceKey }) {
   const [listState, setListState] = useState<FetchListState>({ kind: "idle" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<FetchDetailState>({ kind: "idle" });
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [category, setCategory] = useState<CategoryFilter>("all");
 
   const fetchList = useCallback(async () => {
     setListState({ kind: "loading" });
     try {
-      const res = await fetch(`/api/admin/sentry/issues?service=${service}`, {
+      const params = new URLSearchParams({ service, category });
+      const res = await fetch(`/api/admin/sentry/issues?${params.toString()}`, {
         cache: "no-store",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -138,7 +144,7 @@ export function IssuesClient({ service }: { service: SentryServiceKey }) {
     } catch (err) {
       setListState({ kind: "error", message: err instanceof Error ? err.message : "unknown error" });
     }
-  }, [service]);
+  }, [service, category]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -224,18 +230,49 @@ export function IssuesClient({ service }: { service: SentryServiceKey }) {
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+    <div className="space-y-4">
+      <TabDescription>
+        本番に出ている <strong className="text-slate-200">未解決の Issue（直近 24h）</strong> を一覧表示します。
+        サーバー例外、`pino` の error/fatal、Sentry が自動検知した
+        Performance Issue（N+1 / slow query 等）も含まれます。行をクリックすると右側に詳細とイベント情報を表示。
+      </TabDescription>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-        <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
           <h2 className="font-medium">未解決 Issues (直近 24h)</h2>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || listState.kind === "loading"}
-            className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-slate-800"
-            type="button"
-          >
-            {refreshing || listState.kind === "loading" ? "読み込み中..." : "再取得"}
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5 text-xs">
+              {(["all", "error", "performance"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setCategory(opt)}
+                  className={`rounded px-2 py-1 transition ${
+                    category === opt
+                      ? "bg-slate-700 text-slate-100"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title={
+                    opt === "performance"
+                      ? "Sentry が自動検知した Performance Issue (N+1 / slow query 等)"
+                      : opt === "error"
+                        ? "Performance 系を除いた通常のエラー"
+                        : "全カテゴリ"
+                  }
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing || listState.kind === "loading"}
+              className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-slate-800"
+              type="button"
+            >
+              {refreshing || listState.kind === "loading" ? "読み込み中..." : "再取得"}
+            </button>
+          </div>
         </header>
         <div className="divide-y divide-slate-800">
           {listState.kind === "loading" && <p className="px-4 py-6 text-sm text-slate-400">読み込み中...</p>}
@@ -310,6 +347,7 @@ export function IssuesClient({ service }: { service: SentryServiceKey }) {
           {copyHint && <p className="mt-3 text-xs text-emerald-300">{copyHint}</p>}
         </div>
       </section>
+      </div>
     </div>
   );
 }

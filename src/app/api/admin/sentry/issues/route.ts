@@ -17,6 +17,26 @@ function parseService(url: URL): SentryService | null {
   return null;
 }
 
+type CategoryFilter = "all" | "error" | "performance";
+
+function parseCategory(url: URL): CategoryFilter {
+  const raw = url.searchParams.get("category") ?? "all";
+  if (raw === "error" || raw === "performance") return raw;
+  return "all";
+}
+
+/**
+ * Sentry の issues API に渡す `query` 文字列を組み立てる。
+ *  - all          : `is:unresolved`
+ *  - error        : `is:unresolved !issue.category:performance`
+ *  - performance  : `is:unresolved issue.category:performance` (N+1 / slow query 等)
+ */
+function queryForCategory(category: CategoryFilter): string {
+  if (category === "performance") return "is:unresolved issue.category:performance";
+  if (category === "error") return "is:unresolved !issue.category:performance";
+  return "is:unresolved";
+}
+
 /**
  * service 別に「プロジェクト → UI ラベル」のマッピングを返す。
  * boundary は既存互換で server / web。
@@ -37,6 +57,7 @@ export const GET = withRateLimit(
   withOwnerOrGuest(async (request) => {
     const url = new URL(request.url);
     const service = parseService(url);
+    const category = parseCategory(url);
     if (service === null) {
       return NextResponse.json(
         { error: "invalid service (must be 'boundary' or 'rezona')" },
@@ -50,14 +71,16 @@ export const GET = withRateLimit(
       return NextResponse.json({
         issues: [],
         service,
+        category,
         configured: false,
       });
     }
 
     try {
+      const query = queryForCategory(category);
       const results = await Promise.all(
         config.projects.map((slug) =>
-          listIssues(slug, { service }).catch((err: Error) => {
+          listIssues(slug, { service, query }).catch((err: Error) => {
             console.error(`[sentry] ${service}/${slug} issues failed:`, err.message);
             return [] as SentryIssue[];
           }),
@@ -73,7 +96,7 @@ export const GET = withRateLimit(
       });
       merged.sort((a, b) => (a.lastSeen < b.lastSeen ? 1 : -1));
 
-      return NextResponse.json({ issues: merged, service, configured: true });
+      return NextResponse.json({ issues: merged, service, category, configured: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "unknown error";
       return NextResponse.json({ error: message }, { status: 500 });

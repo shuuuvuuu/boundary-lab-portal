@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { TabDescription } from "./TabDescription";
+
 type CheckRow = {
   id: string;
   service: string;
@@ -176,6 +178,11 @@ export function UptimeClient({
 
   return (
     <section className="space-y-4">
+      <TabDescription>
+        <strong className="text-slate-200">本番ドメインの health チェックと TLS 証明書残日数</strong>
+        を 60 秒間隔（health）/ 24 時間間隔（cert）で自動監視・履歴表示します。
+        連続 N 回失敗で Discord に通知します（実装済、本番アラート発火確認は未実施）。
+      </TabDescription>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-xs text-slate-400">
           <span>Service</span>

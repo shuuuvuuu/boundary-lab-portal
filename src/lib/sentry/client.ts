@@ -291,6 +291,328 @@ export async function listTransactions(
   return summaries;
 }
 
+export type SentryTimeSeriesPoint = {
+  /** epoch sec */
+  time: number;
+  /** value at this time bucket (ms or count, depends on yAxis) */
+  value: number;
+};
+
+export type SentryTimeSeries = {
+  /** transaction name (top events) or "*" for overall */
+  key: string;
+  /** project slug */
+  project: string;
+  points: SentryTimeSeriesPoint[];
+};
+
+/**
+ * Sentry events-stats (dataset=transactions) で transaction の時系列を取得する。
+ *
+ * `topEvents` を指定すると上位 N 件の transaction ごとに別系列で返る。
+ * Recharts などで複数線描画する用途を想定。
+ *
+ * yAxis は引数で切替（p95 / p50 / count）。
+ * 期間は `statsPeriod` (例 "1h", "24h", "7d") を渡す。Sentry が interval を自動決定する。
+ */
+export async function listTransactionTimeSeries(
+  projectSlug: string,
+  opts: {
+    yAxis?: "p95" | "p50" | "count";
+    statsPeriod?: string;
+    topEvents?: number;
+    service?: SentryService;
+  } = {},
+): Promise<SentryTimeSeries[]> {
+  const service = opts.service ?? "boundary";
+  const config = getServiceConfig(service);
+  if (!config) return [];
+
+  const yAxisMap = {
+    p95: "p95(transaction.duration)",
+    p50: "p50(transaction.duration)",
+    count: "count()",
+  } as const;
+  const yAxisField = yAxisMap[opts.yAxis ?? "p95"];
+  const statsPeriod = opts.statsPeriod ?? "24h";
+  const topEvents = opts.topEvents ?? 5;
+
+  const cacheKey = `tx-stats:${service}:${config.org}:${projectSlug}:${opts.yAxis ?? "p95"}:${statsPeriod}:${topEvents}`;
+  const cached = getCached<SentryTimeSeries[]>(cacheKey);
+  if (cached) return cached;
+
+  const params = new URLSearchParams({
+    dataset: "transactions",
+    statsPeriod,
+    yAxis: yAxisField,
+    topEvents: String(topEvents),
+    query: `project:${projectSlug}`,
+    orderby: "-count()",
+  });
+  params.append("field", "transaction");
+  params.append("field", "count()");
+
+  // Sentry top-events response 形式:
+  //   { "<txname>": { "data": [[ts, [{count: N}]], ...], "order": 0 }, ... }
+  // または topEvents 未指定時:
+  //   { "data": [[ts, [{count: N}]], ...] }
+  type StatsBucket = [number, Array<{ count?: number }>];
+  type SeriesObj = { data: StatsBucket[]; order?: number };
+  type Raw = Record<string, SeriesObj | { data: StatsBucket[] }>;
+
+  const raw = await sentryFetch<Raw>(
+    `/organizations/${config.org}/events-stats/?${params.toString()}`,
+    config.token,
+  );
+
+  const series: SentryTimeSeries[] = [];
+  // top-events 形式 (transaction 名がキー)
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value !== "object" || value === null) continue;
+    const data = (value as SeriesObj).data;
+    if (!Array.isArray(data)) continue;
+    series.push({
+      key,
+      project: projectSlug,
+      points: data.map(([ts, slots]) => ({
+        time: ts,
+        value: Array.isArray(slots) && slots.length > 0 ? Number(slots[0]?.count ?? 0) : 0,
+      })),
+    });
+  }
+
+  // Sentry は order でソートしてくれる場合もあるが、明示的に時刻昇順を保証
+  for (const s of series) s.points.sort((a, b) => a.time - b.time);
+
+  setCached(cacheKey, series);
+  return series;
+}
+
+export type SentrySpan = {
+  span_id: string;
+  parent_span_id?: string | null;
+  op?: string | null;
+  description?: string | null;
+  start_timestamp: number;
+  timestamp: number;
+  status?: string | null;
+  data?: Record<string, unknown> | null;
+};
+
+export type SentryTransactionDetail = {
+  eventID: string;
+  transaction: string;
+  project: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  durationMs: number;
+  rootOp: string | null;
+  spans: SentrySpan[];
+  permalink: string;
+};
+
+/**
+ * 指定 transaction の最新 event を取得し、spans 含む詳細を返す。
+ *
+ * 2 段階リクエスト:
+ *  1. discover で最新 event id を 1 件取得 (transaction 名 + project でフィルタ)
+ *  2. project events/{event_id}/ で entries=spans を含む full event を取得
+ *
+ * Phase 2.1 Traces drill-down 用。
+ */
+export async function getLatestTransactionEvent(
+  projectSlug: string,
+  transactionName: string,
+  opts: { service?: SentryService; statsPeriod?: string } = {},
+): Promise<SentryTransactionDetail | null> {
+  const service = opts.service ?? "boundary";
+  const config = getServiceConfig(service);
+  if (!config) return null;
+  const statsPeriod = opts.statsPeriod ?? "24h";
+
+  const cacheKey = `tx-detail:${service}:${config.org}:${projectSlug}:${transactionName}:${statsPeriod}`;
+  const cached = getCached<SentryTransactionDetail>(cacheKey);
+  if (cached) return cached;
+
+  // 1. Discover で最新 event id 取得
+  const findParams = new URLSearchParams({
+    dataset: "transactions",
+    statsPeriod,
+    sort: "-timestamp",
+    per_page: "1",
+    query: `project:${projectSlug} transaction:"${transactionName}"`,
+  });
+  for (const f of ["id", "timestamp", "transaction.duration"]) {
+    findParams.append("field", f);
+  }
+
+  type DiscoverRow = { id?: string; "transaction.duration"?: number };
+  const discover = await sentryFetch<{ data?: DiscoverRow[] }>(
+    `/organizations/${config.org}/events/?${findParams.toString()}`,
+    config.token,
+  );
+  const eventId = discover.data?.[0]?.id;
+  if (!eventId) return null;
+
+  // 2. Project events/{event_id}/ で full event 取得
+  type EventEntry = { type: string; data: unknown };
+  type EventResponse = {
+    eventID: string;
+    transaction?: string;
+    startTimestamp: number;
+    endTimestamp?: number;
+    timestamp?: number;
+    contexts?: { trace?: { op?: string } };
+    entries?: EventEntry[];
+  };
+
+  const event = await sentryFetch<EventResponse>(
+    `/projects/${config.org}/${projectSlug}/events/${eventId}/`,
+    config.token,
+  );
+
+  const endTs = event.endTimestamp ?? event.timestamp ?? event.startTimestamp;
+  const spansEntry = event.entries?.find((e) => e.type === "spans");
+  const spans = (Array.isArray(spansEntry?.data) ? spansEntry.data : []) as SentrySpan[];
+
+  const detail: SentryTransactionDetail = {
+    eventID: event.eventID,
+    transaction: event.transaction ?? transactionName,
+    project: projectSlug,
+    startTimestamp: event.startTimestamp,
+    endTimestamp: endTs,
+    durationMs: (endTs - event.startTimestamp) * 1000,
+    rootOp: event.contexts?.trace?.op ?? null,
+    spans,
+    permalink: `https://${config.org}.sentry.io/performance/${projectSlug}:${eventId}/`,
+  };
+
+  setCached(cacheKey, detail);
+  return detail;
+}
+
+export type WebVitalKey = "lcp" | "fcp" | "cls" | "inp" | "ttfb";
+
+export type WebVitalsSummary = {
+  /** いずれかが取れない場合は undefined */
+  lcp?: number;
+  fcp?: number;
+  cls?: number;
+  inp?: number;
+  ttfb?: number;
+  count: number;
+  /** apps/web project slug */
+  project: string;
+};
+
+const WEB_VITAL_FIELDS: Record<WebVitalKey, string> = {
+  lcp: "p75(measurements.lcp)",
+  fcp: "p75(measurements.fcp)",
+  cls: "p75(measurements.cls)",
+  inp: "p75(measurements.inp)",
+  ttfb: "p75(measurements.ttfb)",
+};
+
+/**
+ * apps/web (boundary-metaverse-web 等) の Web Vitals 現在値を集計取得する。
+ *
+ * boundary では service config の projects[1] (web) を採用。
+ * Phase 2.1 Web Vitals タブ用。
+ */
+export async function getWebVitalsSummary(
+  opts: { service?: SentryService; statsPeriod?: string } = {},
+): Promise<WebVitalsSummary | null> {
+  const service = opts.service ?? "boundary";
+  const config = getServiceConfig(service);
+  if (!config) return null;
+  const webProject = config.projects[1] ?? config.projects[0];
+  if (!webProject) return null;
+  const statsPeriod = opts.statsPeriod ?? "24h";
+
+  const cacheKey = `web-vitals:${service}:${config.org}:${webProject}:${statsPeriod}`;
+  const cached = getCached<WebVitalsSummary>(cacheKey);
+  if (cached) return cached;
+
+  const params = new URLSearchParams({
+    dataset: "transactions",
+    statsPeriod,
+    query: `project:${webProject}`,
+    per_page: "1",
+  });
+  for (const field of Object.values(WEB_VITAL_FIELDS)) params.append("field", field);
+  params.append("field", "count()");
+
+  type Raw = { data?: Array<Record<string, string | number>> };
+  const raw = await sentryFetch<Raw>(
+    `/organizations/${config.org}/events/?${params.toString()}`,
+    config.token,
+  );
+  const row = raw.data?.[0];
+  if (!row) {
+    const empty: WebVitalsSummary = { count: 0, project: webProject };
+    setCached(cacheKey, empty);
+    return empty;
+  }
+
+  const summary: WebVitalsSummary = {
+    project: webProject,
+    count: Number(row["count()"] ?? 0),
+  };
+  for (const [key, fieldName] of Object.entries(WEB_VITAL_FIELDS)) {
+    const v = row[fieldName];
+    if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+      summary[key as WebVitalKey] = v;
+    }
+  }
+  setCached(cacheKey, summary);
+  return summary;
+}
+
+/**
+ * 指定 Web Vital の時系列を取得する (events-stats yAxis=p75(measurements.lcp) 等)。
+ */
+export async function getWebVitalTimeSeries(
+  vital: WebVitalKey,
+  opts: { service?: SentryService; statsPeriod?: string } = {},
+): Promise<SentryTimeSeries | null> {
+  const service = opts.service ?? "boundary";
+  const config = getServiceConfig(service);
+  if (!config) return null;
+  const webProject = config.projects[1] ?? config.projects[0];
+  if (!webProject) return null;
+  const statsPeriod = opts.statsPeriod ?? "24h";
+
+  const yAxisField = WEB_VITAL_FIELDS[vital];
+  const cacheKey = `web-vital-stats:${service}:${config.org}:${webProject}:${vital}:${statsPeriod}`;
+  const cached = getCached<SentryTimeSeries>(cacheKey);
+  if (cached) return cached;
+
+  const params = new URLSearchParams({
+    dataset: "transactions",
+    statsPeriod,
+    yAxis: yAxisField,
+    query: `project:${webProject}`,
+  });
+
+  type StatsBucket = [number, Array<{ count?: number }>];
+  const raw = await sentryFetch<{ data?: StatsBucket[] }>(
+    `/organizations/${config.org}/events-stats/?${params.toString()}`,
+    config.token,
+  );
+
+  const series: SentryTimeSeries = {
+    key: vital,
+    project: webProject,
+    points: (raw.data ?? []).map(([ts, slots]) => ({
+      time: ts,
+      value: Array.isArray(slots) && slots.length > 0 ? Number(slots[0]?.count ?? 0) : 0,
+    })),
+  };
+  series.points.sort((a, b) => a.time - b.time);
+  setCached(cacheKey, series);
+  return series;
+}
+
 export async function getIssue(
   issueId: string,
   opts: { service?: SentryService } = {},

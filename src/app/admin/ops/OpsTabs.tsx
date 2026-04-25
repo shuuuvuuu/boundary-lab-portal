@@ -5,13 +5,15 @@ import { IssuesClient, type SentryServiceKey } from "./IssuesClient";
 import { LogsClient } from "./LogsClient";
 import { TracesClient } from "./TracesClient";
 import { UptimeClient } from "./UptimeClient";
+import { WebVitalsClient } from "./WebVitalsClient";
 
-type TabKey = "issues" | "logs" | "traces" | "uptime";
+type TabKey = "issues" | "logs" | "traces" | "web-vitals" | "uptime";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "issues", label: "未解決 Issues" },
   { key: "logs", label: "Logs" },
   { key: "traces", label: "Traces" },
+  { key: "web-vitals", label: "Web Vitals" },
   { key: "uptime", label: "Uptime" },
 ];
 
@@ -23,6 +25,7 @@ function readInitialTab(): TabKey {
   const raw = url.searchParams.get("tab");
   if (raw === "logs") return "logs";
   if (raw === "traces") return "traces";
+  if (raw === "web-vitals") return "web-vitals";
   if (raw === "uptime") return "uptime";
   return "issues";
 }
@@ -143,6 +146,7 @@ export function OpsTabs({
       {active === "issues" && <IssuesClient service={service} />}
       {active === "logs" && <LogsClient service={service} />}
       {active === "traces" && <TracesClient service={service} />}
+      {active === "web-vitals" && <WebVitalsClient service={service} />}
       {active === "uptime" && (
         <UptimeClient services={healthServices} defaultService={defaultHealthService} />
       )}
