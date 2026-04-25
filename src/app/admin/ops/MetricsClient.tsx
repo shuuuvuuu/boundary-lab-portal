@@ -44,10 +44,33 @@ type RoomsMetrics = {
   rooms: RoomSnapshot[];
 };
 
+type HostSnapshot = {
+  ts: number;
+  memory: {
+    total_kb: number;
+    free_kb: number;
+    available_kb: number;
+    buffers_kb: number;
+    cached_kb: number;
+    used_kb: number;
+    used_pct: number;
+  };
+  swap: { total_kb: number; free_kb: number; used_kb: number; used_pct: number };
+  load: { avg_1: number; avg_5: number; avg_15: number; runnable: number; total_threads: number };
+  cpu: { cores: number; overall_pct: number; iowait_pct: number };
+  disk: { root_gb: number; root_used_gb: number; root_used_pct: number };
+  network: { rx_bytes: number; tx_bytes: number; iface_name: string };
+};
+
 type FetchState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; server: ServerMetrics | null; rooms: RoomsMetrics | null }
+  | {
+      kind: "ready";
+      server: ServerMetrics | null;
+      rooms: RoomsMetrics | null;
+      host: HostSnapshot | null;
+    }
   | { kind: "error"; message: string };
 
 type RefreshOption = "5s" | "60s" | "1h" | "24h" | "off";
@@ -112,11 +135,13 @@ export function MetricsClient() {
         type: string;
         server?: ServerMetrics;
         rooms?: RoomsMetrics;
+        host?: HostSnapshot;
       };
       setState({
         kind: "ready",
         server: json.server ?? null,
         rooms: json.rooms ?? null,
+        host: json.host ?? null,
       });
     } catch (err) {
       setState({
@@ -162,6 +187,7 @@ export function MetricsClient() {
 
   const server = state.kind === "ready" ? state.server : null;
   const rooms = state.kind === "ready" ? state.rooms : null;
+  const host = state.kind === "ready" ? state.host : null;
   const current = server?.current;
 
   return (
@@ -228,6 +254,130 @@ export function MetricsClient() {
         </p>
       )}
 
+      {/* Host (Droplet) 全体 */}
+      {host && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+          <header className="border-b border-slate-800 px-4 py-2">
+            <h3 className="text-sm font-medium text-slate-200">
+              Droplet host (全コンテナ合算)
+            </h3>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              boundary-server / portal / livekit / caddy / app / etc. 全部の合算。
+              boundary-server プロセス単独の値は下のセクションで確認。
+            </p>
+          </header>
+          <div className="grid gap-3 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
+            <HostCard
+              label="Memory"
+              primary={`${(host.memory.used_kb / 1024 / 1024).toFixed(2)}GB`}
+              secondary={`/ ${(host.memory.total_kb / 1024 / 1024).toFixed(1)}GB (${host.memory.used_pct}%)`}
+              colorClass={
+                host.memory.used_pct >= 85
+                  ? "text-red-300"
+                  : host.memory.used_pct >= 70
+                    ? "text-amber-300"
+                    : "text-slate-100"
+              }
+            />
+            <HostCard
+              label="Swap"
+              primary={`${(host.swap.used_kb / 1024).toFixed(0)}MB`}
+              secondary={`/ ${(host.swap.total_kb / 1024 / 1024).toFixed(1)}GB (${host.swap.used_pct}%)`}
+              colorClass={
+                host.swap.used_pct >= 50
+                  ? "text-red-300"
+                  : host.swap.used_pct >= 5
+                    ? "text-amber-300"
+                    : "text-slate-100"
+              }
+              hint={
+                host.swap.used_pct > 5
+                  ? "swap が使われ始めている = 物理メモリ枯渇の前兆"
+                  : "swap 未使用 = 健全"
+              }
+            />
+            <HostCard
+              label="Load avg (1/5/15)"
+              primary={`${host.load.avg_1.toFixed(2)}`}
+              secondary={`${host.load.avg_5.toFixed(2)} / ${host.load.avg_15.toFixed(2)} · ${host.cpu.cores} cores`}
+              colorClass={
+                host.load.avg_1 / host.cpu.cores >= 2
+                  ? "text-red-300"
+                  : host.load.avg_1 / host.cpu.cores >= 1
+                    ? "text-amber-300"
+                    : "text-slate-100"
+              }
+              hint={`load > cores (${host.cpu.cores}) = CPU 飽和`}
+            />
+            <HostCard
+              label="Disk (/)"
+              primary={`${host.disk.root_used_gb.toFixed(1)}GB`}
+              secondary={`/ ${host.disk.root_gb.toFixed(0)}GB (${host.disk.root_used_pct}%)`}
+              colorClass={
+                host.disk.root_used_pct >= 85
+                  ? "text-red-300"
+                  : host.disk.root_used_pct >= 70
+                    ? "text-amber-300"
+                    : "text-slate-100"
+              }
+            />
+            <HostCard
+              label="CPU (host total)"
+              primary={
+                host.cpu.overall_pct < 0
+                  ? "—"
+                  : `${host.cpu.overall_pct.toFixed(1)}%`
+              }
+              secondary={
+                host.cpu.iowait_pct < 0
+                  ? "iowait —"
+                  : `iowait ${host.cpu.iowait_pct.toFixed(1)}%`
+              }
+              colorClass={
+                host.cpu.overall_pct >= 80
+                  ? "text-red-300"
+                  : host.cpu.overall_pct >= 60
+                    ? "text-amber-300"
+                    : "text-slate-100"
+              }
+              hint="2 回目以降の取得で値が出る。iowait 高 = ディスク I/O ボトルネック"
+            />
+            <HostCard
+              label="Threads (run/total)"
+              primary={`${host.load.runnable}`}
+              secondary={`/ ${host.load.total_threads}`}
+              colorClass="text-slate-100"
+              hint="runnable = 現在 CPU を待っているスレッド数"
+            />
+            <HostCard
+              label={`Network (${host.network.iface_name})`}
+              primary={`rx ${(host.network.rx_bytes / 1024 / 1024).toFixed(0)}MB`}
+              secondary={`tx ${(host.network.tx_bytes / 1024 / 1024).toFixed(0)}MB`}
+              colorClass="text-slate-100"
+              hint="container 内 eth0 = Docker bridge 経由の累計 (host eth0 ではない)"
+            />
+            <HostCard
+              label="Memory breakdown"
+              primary={`${(host.memory.cached_kb / 1024 / 1024).toFixed(2)}GB`}
+              secondary={`cache · ${(host.memory.buffers_kb / 1024 / 1024).toFixed(2)}GB buffer`}
+              colorClass="text-slate-100"
+              hint="cache/buffer は OS が後で解放可能なため used に見えても危険ではない"
+            />
+          </div>
+        </section>
+      )}
+
+      {/* boundary-server プロセス単独 */}
+      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+        <header className="border-b border-slate-800 px-4 py-2">
+          <h3 className="text-sm font-medium text-slate-200">
+            boundary-server プロセス単独
+          </h3>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            host 全体ではなく、Node.js プロセスの内訳。直近 60 秒の時系列付き。
+          </p>
+        </header>
+        <div className="px-4 py-3 space-y-4">
       {/* 現在値カード */}
       {current && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -280,6 +430,8 @@ export function MetricsClient() {
           <ChartCard title="Event loop lag (ms)" data={lagChartData} keys={["p50", "p99"]} colors={["#94a3b8", "#f87171"]} unit="ms" />
         </div>
       )}
+        </div>
+      </section>
 
       {/* Room dashboard */}
       {rooms && (
@@ -330,6 +482,28 @@ export function MetricsClient() {
           )}
         </section>
       )}
+    </div>
+  );
+}
+
+function HostCard({
+  label,
+  primary,
+  secondary,
+  colorClass,
+  hint,
+}: {
+  label: string;
+  primary: string;
+  secondary: string;
+  colorClass: string;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded border border-slate-800 bg-slate-950/40 px-3 py-2" title={hint}>
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`mt-0.5 text-lg font-semibold tabular-nums ${colorClass}`}>{primary}</div>
+      <div className="text-[10px] text-slate-400">{secondary}</div>
     </div>
   );
 }
