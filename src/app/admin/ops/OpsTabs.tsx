@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { IssuesClient, type SentryServiceKey } from "./IssuesClient";
 import { LogsClient } from "./LogsClient";
+import { TracesClient } from "./TracesClient";
 import { UptimeClient } from "./UptimeClient";
 
-type TabKey = "issues" | "logs" | "uptime";
+type TabKey = "issues" | "logs" | "traces" | "uptime";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "issues", label: "未解決 Issues" },
   { key: "logs", label: "Logs" },
+  { key: "traces", label: "Traces" },
   { key: "uptime", label: "Uptime" },
 ];
 
@@ -20,6 +22,7 @@ function readInitialTab(): TabKey {
   const url = new URL(window.location.href);
   const raw = url.searchParams.get("tab");
   if (raw === "logs") return "logs";
+  if (raw === "traces") return "traces";
   if (raw === "uptime") return "uptime";
   return "issues";
 }
@@ -139,6 +142,7 @@ export function OpsTabs({
 
       {active === "issues" && <IssuesClient service={service} />}
       {active === "logs" && <LogsClient service={service} />}
+      {active === "traces" && <TracesClient service={service} />}
       {active === "uptime" && (
         <UptimeClient services={healthServices} defaultService={defaultHealthService} />
       )}
