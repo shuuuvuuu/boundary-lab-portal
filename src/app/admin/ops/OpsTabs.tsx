@@ -4,11 +4,19 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityClient } from "./ActivityClient";
 import { IssuesClient, type SentryServiceKey } from "./IssuesClient";
 import { LogsClient } from "./LogsClient";
+import { MetricsClient } from "./MetricsClient";
 import { TracesClient } from "./TracesClient";
 import { UptimeClient } from "./UptimeClient";
 import { WebVitalsClient } from "./WebVitalsClient";
 
-type TabKey = "issues" | "logs" | "traces" | "web-vitals" | "activity" | "uptime";
+type TabKey =
+  | "issues"
+  | "logs"
+  | "traces"
+  | "web-vitals"
+  | "activity"
+  | "metrics"
+  | "uptime";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "issues", label: "未解決 Issues" },
@@ -16,6 +24,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "traces", label: "Traces" },
   { key: "web-vitals", label: "Web Vitals" },
   { key: "activity", label: "Activity" },
+  { key: "metrics", label: "Metrics" },
   { key: "uptime", label: "Uptime" },
 ];
 
@@ -29,6 +38,7 @@ function readInitialTab(): TabKey {
   if (raw === "traces") return "traces";
   if (raw === "web-vitals") return "web-vitals";
   if (raw === "activity") return "activity";
+  if (raw === "metrics") return "metrics";
   if (raw === "uptime") return "uptime";
   return "issues";
 }
@@ -121,9 +131,12 @@ export function OpsTabs({
           })}
         </div>
 
-        {/* Uptime / Activity タブは内部で service 選択を持つため、ここでは Sentry 用のみ表示。
+        {/* Uptime / Activity / Metrics タブは内部で service 選択を持つため、Sentry 用セレクタは非表示。
             rezona 用 env が無い場合は boundary 単一運用なのでセレクタ自体を出さない。 */}
-        {active !== "uptime" && active !== "activity" && showSentryServiceSelector && (
+        {active !== "uptime" &&
+          active !== "activity" &&
+          active !== "metrics" &&
+          showSentryServiceSelector && (
           <div className="ml-auto flex items-center gap-2 pb-1 text-xs text-slate-400">
             <span>Sentry Service</span>
             <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
@@ -151,6 +164,7 @@ export function OpsTabs({
       {active === "traces" && <TracesClient service={service} />}
       {active === "web-vitals" && <WebVitalsClient service={service} />}
       {active === "activity" && <ActivityClient />}
+      {active === "metrics" && <MetricsClient />}
       {active === "uptime" && (
         <UptimeClient services={healthServices} defaultService={defaultHealthService} />
       )}
