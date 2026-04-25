@@ -30,10 +30,15 @@ export const GET = withRateLimit(
 
     const url = new URL(request.url);
     const type = url.searchParams.get("type") ?? "all";
-    const valid = type === "server" || type === "rooms" || type === "all";
+    const valid =
+      type === "server" ||
+      type === "rooms" ||
+      type === "host" ||
+      type === "users" ||
+      type === "all";
     if (!valid) {
       return NextResponse.json(
-        { error: "type must be server | rooms | all" },
+        { error: "type must be server | rooms | host | users | all" },
         { status: 400 },
       );
     }
