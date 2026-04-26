@@ -14,6 +14,7 @@ type ActivityRow = {
   user_id: string | null;
   metadata: Record<string, unknown>;
   occurred_at: string;
+  sentry_link?: string | null;
 };
 
 type Summary = { user_id: string; count: number };
@@ -208,66 +209,6 @@ function describeEvent(row: ActivityRow): string | null {
   return null;
 }
 
-/**
- * 各イベントについて Sentry で開く際の deep link を組み立てる。
- *
- * - api_request: Discover で transaction 名フィルタ
- * - server_event / user_action: Discover で時刻周辺の events search
- *
- * org slug は環境変数 NEXT_PUBLIC_SENTRY_ORG / クエリ等から取れないため
- * 既知値（boundarylabo は shuu-dw）をハードコードする。rezona 統合時は分岐拡張。
- */
-const SENTRY_ORG = "shuu-dw";
-const SENTRY_PROJECT_BY_SERVICE: Record<string, string> = {
-  boundary: "boundary-metaverse-server",
-  rezona: "rezona-server",
-};
-
-function sentryDeepLink(row: ActivityRow): string | null {
-  const project = SENTRY_PROJECT_BY_SERVICE[row.service] ?? null;
-  if (!project) return null;
-
-  const occurredMs = new Date(row.occurred_at).getTime();
-  // ±1h の窓で検索する（Sentry の Discover はミリ秒精度の絞り込みは UI 側で行う想定）
-  const start = new Date(occurredMs - 30 * 60_000).toISOString();
-  const end = new Date(occurredMs + 30 * 60_000).toISOString();
-
-  if (row.event_type === "api_request") {
-    const m = row.metadata ?? {};
-    const method = (m.method as string | undefined) ?? row.action.split(" ")[0] ?? "";
-    const path = (m.path as string | undefined) ?? row.action.split(" ").slice(1).join(" ");
-    const transaction = `${method} ${path}`.trim();
-    const params = new URLSearchParams({
-      query: `transaction:"${transaction}"`,
-      statsPeriod: "24h",
-      dataset: "transactions",
-      project: project,
-    });
-    return `https://${SENTRY_ORG}.sentry.io/discover/results/?${params.toString()}`;
-  }
-
-  if (row.event_type === "server_event") {
-    const params = new URLSearchParams({
-      query: `is:unresolved`,
-      project: project,
-      start,
-      end,
-    });
-    return `https://${SENTRY_ORG}.sentry.io/issues/?${params.toString()}`;
-  }
-
-  if (row.event_type === "user_action") {
-    const params = new URLSearchParams({
-      query: `message:"${row.action}"`,
-      statsPeriod: "24h",
-      project: project,
-    });
-    return `https://${SENTRY_ORG}.sentry.io/discover/results/?${params.toString()}`;
-  }
-
-  return null;
-}
-
 export function ActivityClient() {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [period, setPeriod] = useState<PeriodOption>("24h");
@@ -432,7 +373,7 @@ export function ActivityClient() {
             {events.map((e) => {
               const status = e.metadata?.status as number | undefined;
               const description = describeEvent(e);
-              const sentryLink = sentryDeepLink(e);
+              const sentryLink = e.sentry_link ?? null;
               const path = (e.metadata?.path as string | undefined) ?? "";
               const suspicious =
                 e.event_type === "api_request" && isSuspiciousScan(path);
