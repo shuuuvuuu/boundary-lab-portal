@@ -62,6 +62,12 @@ type ServiceConfig = {
 type CacheEntry<T> = { at: number; data: T };
 const cache = new Map<string, CacheEntry<unknown>>();
 
+type ProjectIdCacheEntry = { at: number; id: string | null };
+const projectIdCache = new Map<string, ProjectIdCacheEntry>();
+const projectIdInFlight = new Map<string, Promise<string | null>>();
+const PROJECT_ID_TTL_MS = 24 * 60 * 60 * 1000;
+const PROJECT_ID_NEGATIVE_TTL_MS = 5 * 60 * 1000;
+
 function getCached<T>(key: string): T | null {
   const hit = cache.get(key);
   if (!hit) return null;
@@ -129,6 +135,60 @@ async function sentryFetch<T>(path: string, token: string): Promise<T> {
   }
 
   return (await res.json()) as T;
+}
+
+/**
+ * Sentry Web UI の deep link で使う数値 project ID を slug から解決する。
+ *
+ * env 直指定を最優先し、未設定時だけ Sentry API (`/projects/{org}/{slug}/`) に問い合わせる。
+ * API rate limit / token 無効時でも env があればリンク生成を継続できるようにする。
+ */
+export async function resolveProjectId(
+  service: SentryService,
+  projectSlug: string,
+): Promise<string | null> {
+  const config = getServiceConfig(service);
+  if (!config) return null;
+
+  const projectIndex = config.projects.indexOf(projectSlug);
+  const role = projectIndex === 1 ? "WEB" : "SERVER";
+  const envName = `SENTRY_${service.toUpperCase()}_${role}_PROJECT_ID`;
+  const fromEnv = process.env[envName];
+  if (fromEnv && /^\d+$/.test(fromEnv)) return fromEnv;
+
+  const cacheKey = `${config.org}:${projectSlug}`;
+  const hit = projectIdCache.get(cacheKey);
+  if (hit) {
+    const ttl = hit.id === null ? PROJECT_ID_NEGATIVE_TTL_MS : PROJECT_ID_TTL_MS;
+    if (Date.now() - hit.at < ttl) return hit.id;
+    projectIdCache.delete(cacheKey);
+  }
+
+  const inFlight = projectIdInFlight.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const promise = (async () => {
+    try {
+      const data = await sentryFetch<{ id?: string | number }>(
+        `/projects/${config.org}/${projectSlug}/`,
+        config.token,
+      );
+      const id = data.id != null ? String(data.id) : null;
+      projectIdCache.set(cacheKey, { at: Date.now(), id });
+      return id;
+    } catch (err) {
+      projectIdCache.set(cacheKey, { at: Date.now(), id: null });
+      console.warn(
+        `[sentry] resolveProjectId failed for ${service}/${projectSlug}:`,
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    } finally {
+      projectIdInFlight.delete(cacheKey);
+    }
+  })();
+  projectIdInFlight.set(cacheKey, promise);
+  return promise;
 }
 
 export async function listIssues(
@@ -474,6 +534,12 @@ export async function getLatestTransactionEvent(
   const endTs = event.endTimestamp ?? event.timestamp ?? event.startTimestamp;
   const spansEntry = event.entries?.find((e) => e.type === "spans");
   const spans = (Array.isArray(spansEntry?.data) ? spansEntry.data : []) as SentrySpan[];
+  const projectId = await resolveProjectId(service, projectSlug);
+  const permalink = projectId
+    ? `https://${config.org}.sentry.io/performance/?project=${projectId}&transaction=${encodeURIComponent(
+        transactionName,
+      )}`
+    : `https://${config.org}.sentry.io/performance/`;
 
   const detail: SentryTransactionDetail = {
     eventID: event.eventID,
@@ -484,7 +550,7 @@ export async function getLatestTransactionEvent(
     durationMs: (endTs - event.startTimestamp) * 1000,
     rootOp: event.contexts?.trace?.op ?? null,
     spans,
-    permalink: `https://${config.org}.sentry.io/performance/${projectSlug}:${eventId}/`,
+    permalink,
   };
 
   setCached(cacheKey, detail);
@@ -637,4 +703,6 @@ export async function getIssue(
 
 export function clearCache(): void {
   cache.clear();
+  projectIdCache.clear();
+  projectIdInFlight.clear();
 }

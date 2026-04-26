@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { withOwnerOrGuest } from "@/lib/auth/with-auth";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
+import { attachSentryLinks } from "@/lib/sentry/links";
 
 /**
  * GET /api/admin/activity
@@ -109,6 +110,7 @@ export const GET = withRateLimit(
     }
 
     const rows = (data ?? []) as ActivityRow[];
+    const rowsWithLinks = await attachSentryLinks(rows);
 
     // 集計サマリ（期間内全件ベースではなく、取得した limit 件数ベース）
     const userCount = new Map<string, number>();
@@ -131,7 +133,7 @@ export const GET = withRateLimit(
       .slice(0, 10);
 
     return NextResponse.json({
-      events: rows,
+      events: rowsWithLinks,
       total: rows.length,
       statsPeriod: period.label,
       services,
