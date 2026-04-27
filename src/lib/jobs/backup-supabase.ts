@@ -42,7 +42,9 @@ export const backupSupabaseJob: CronJob = {
     const summary: Array<{ table: string; rows: number; bytes: number }> = [];
     const now = new Date(ctx.firedAt);
     const yyyymmdd = now.toISOString().slice(0, 10).replace(/-/g, "");
-    const baseKey = `boundary-backups/supabase/${yyyymmdd}`;
+    // bucket 名 (env デフォルト boundary-backups) は uploadBackupArtifact 側で
+    // /<bucket>/<key> の形でパスに付くので、key 側に prefix を入れると二重化する。
+    const baseKey = `supabase/${yyyymmdd}`;
 
     for (const table of TARGET_TABLES) {
       const { data, error } = await supabase

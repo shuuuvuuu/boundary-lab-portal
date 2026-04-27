@@ -120,6 +120,7 @@ async function persistRunEnd(
     const fields = {
       job: job.name,
       kind: job.kind,
+      run_id: runId,
       duration_ms: durationMs,
       message: result.message ?? "(no message)",
     };
@@ -138,7 +139,7 @@ async function persistRunEnd(
     try {
       await sendOpsEmail({
         subject: `[Boundary LAB] job ${job.name} failed`,
-        text: `Job: ${job.name}\nKind: ${job.kind}\nDuration: ${durationMs}ms\nMessage: ${result.message ?? "(no message)"}`,
+        text: `Job: ${job.name}\nKind: ${job.kind}\nRun ID: ${runId ?? "(not persisted)"}\nDuration: ${durationMs}ms\nMessage: ${result.message ?? "(no message)"}`,
       });
     } catch (err) {
       console.error(

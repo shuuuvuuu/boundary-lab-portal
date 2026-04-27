@@ -186,7 +186,10 @@ function processNonCode(text: string): string {
     (_, label: string, href: string) => {
       // href は escapeHtml で & が &amp; 化されている。href をクリーンに戻す
       const cleanHref = href.replace(/&amp;/g, "&");
-      return `<a href="${cleanHref}" rel="noreferrer">${label}</a>`;
+      // javascript:/data:/vbscript: などの危険スキームを弾く。
+      // 許可: http(s)://, mailto:, 同一オリジンの絶対パス /, ページ内 #
+      const safeHref = /^(https?:|mailto:|\/|#)/i.test(cleanHref) ? cleanHref : "#";
+      return `<a href="${safeHref}" rel="noreferrer">${label}</a>`;
     },
   );
   // bold
