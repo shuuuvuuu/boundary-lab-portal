@@ -102,7 +102,9 @@ export const backupSentryJob: CronJob = {
     }
 
     const yyyymmdd = ctx.firedAt.slice(0, 10).replace(/-/g, "");
-    const baseKey = `boundary-backups/sentry/${yyyymmdd}`;
+    // bucket 名 (env デフォルト boundary-backups) は uploadBackupArtifact 側で
+    // /<bucket>/<key> の形でパスに付くので、key 側に prefix を入れると二重化する。
+    const baseKey = `sentry/${yyyymmdd}`;
 
     const summary: Array<{ service: string; project: string; issues: number }> = [];
     for (const svc of services) {

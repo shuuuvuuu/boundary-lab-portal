@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 
 /**
  * POST /api/logs/ingest
@@ -93,7 +94,7 @@ function normalize(raw: unknown): IngestRow | string {
   };
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const token = process.env.PORTAL_LOG_INGEST_TOKEN;
   if (!token) {
     return NextResponse.json(
@@ -176,6 +177,21 @@ export async function POST(request: NextRequest) {
   }
   return NextResponse.json({ inserted: rows.length });
 }
+
+/**
+ * Bearer token をキーに 60 req/min で制限する。
+ * 認証なしリクエストは "anon" バケットに集約し、共通枠を奪い合う設計。
+ * (実際は handlePost 側で 401 で弾くので "anon" 枠は早晩埋まる)
+ */
+export const POST = withRateLimit(
+  {
+    max: 60,
+    windowMs: 60_000,
+    scope: "logs-ingest",
+    keyBy: (req) => req.headers.get("authorization") ?? "anon",
+  },
+  handlePost,
+);
 
 export function GET() {
   return NextResponse.json({ error: "method not allowed" }, { status: 405 });

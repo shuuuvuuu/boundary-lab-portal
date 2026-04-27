@@ -63,8 +63,33 @@ function encodeHeader(value: string): string {
   return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
 }
 
+/** SMTP 全体の wall-clock timeout (socket 単体 setTimeout の保険)。 */
+const OVERALL_SMTP_TIMEOUT_MS = 30_000;
+/** ソケット単体のアイドル timeout (Scaleway TEM への接続が固まった時の救済)。 */
+const SOCKET_IDLE_TIMEOUT_MS = 15_000;
+/** 1 レスポンス待ち timeout。 */
+const READ_RESPONSE_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`SMTP ${label} timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 async function readResponse(socket: net.Socket | tls.TLSSocket): Promise<string> {
-  return new Promise((resolve, reject) => {
+  const inner = new Promise<string>((resolve, reject) => {
     let buf = "";
     const onData = (chunk: Buffer) => {
       buf += chunk.toString("utf8");
@@ -80,102 +105,147 @@ async function readResponse(socket: net.Socket | tls.TLSSocket): Promise<string>
       cleanup();
       reject(err);
     };
+    const onClose = () => {
+      cleanup();
+      reject(new Error("SMTP socket closed before response completed"));
+    };
     const cleanup = () => {
       socket.off("data", onData);
       socket.off("error", onError);
+      socket.off("close", onClose);
     };
     socket.on("data", onData);
     socket.on("error", onError);
+    socket.on("close", onClose);
   });
+  return withTimeout(inner, READ_RESPONSE_TIMEOUT_MS, "readResponse");
 }
 
 async function send(config: SmtpConfig, to: string[], subject: string, text: string): Promise<void> {
-  const socket = net.createConnection({ host: config.host, port: config.port });
-  socket.setEncoding("utf8");
+  let socket: net.Socket | undefined;
+  let tlsSocket: tls.TLSSocket | undefined;
 
-  await new Promise<void>((resolve, reject) => {
-    socket.once("connect", () => resolve());
-    socket.once("error", reject);
-  });
+  const inner = (async () => {
+    socket = net.createConnection({ host: config.host, port: config.port });
+    socket.setEncoding("utf8");
+    socket.setTimeout(SOCKET_IDLE_TIMEOUT_MS);
+    socket.on("timeout", () => {
+      // 'timeout' イベントは destroy しない限り接続を切らない仕様。
+      // ここで destroy してすべての pending Promise を error にフォールスルーさせる。
+      socket?.destroy(new Error(`SMTP socket idle for ${SOCKET_IDLE_TIMEOUT_MS}ms`));
+    });
 
-  const greeting = await readResponse(socket);
-  if (!greeting.startsWith("220")) throw new Error(`SMTP greeting unexpected: ${greeting}`);
-
-  socket.write(`EHLO boundarylabo.com\r\n`);
-  await readResponse(socket);
-
-  socket.write(`STARTTLS\r\n`);
-  const startTls = await readResponse(socket);
-  if (!startTls.startsWith("220")) throw new Error(`STARTTLS failed: ${startTls}`);
-
-  // 既存ソケットをラップして TLS にアップグレード
-  const tlsSocket: tls.TLSSocket = await new Promise((resolve, reject) => {
-    const s = tls.connect(
-      {
-        socket,
-        host: config.host,
-        servername: config.host,
-      },
-      () => resolve(s),
+    await withTimeout(
+      new Promise<void>((resolve, reject) => {
+        socket!.once("connect", () => resolve());
+        socket!.once("error", reject);
+      }),
+      SOCKET_IDLE_TIMEOUT_MS,
+      "connect",
     );
-    s.once("error", reject);
-  });
-  tlsSocket.setEncoding("utf8");
 
-  tlsSocket.write(`EHLO boundarylabo.com\r\n`);
-  await readResponse(tlsSocket);
+    const greeting = await readResponse(socket);
+    if (!greeting.startsWith("220")) throw new Error(`SMTP greeting unexpected: ${greeting}`);
 
-  tlsSocket.write(`AUTH LOGIN\r\n`);
-  await readResponse(tlsSocket);
-  tlsSocket.write(`${Buffer.from(config.user, "utf8").toString("base64")}\r\n`);
-  await readResponse(tlsSocket);
-  tlsSocket.write(`${Buffer.from(config.pass, "utf8").toString("base64")}\r\n`);
-  const authResp = await readResponse(tlsSocket);
-  if (!authResp.startsWith("235")) throw new Error(`AUTH failed: ${authResp.slice(0, 200)}`);
+    socket.write(`EHLO boundarylabo.com\r\n`);
+    await readResponse(socket);
 
-  tlsSocket.write(`MAIL FROM:<${config.from}>\r\n`);
-  const mailFromResp = await readResponse(tlsSocket);
-  if (!mailFromResp.startsWith("250")) throw new Error(`MAIL FROM failed: ${mailFromResp}`);
+    socket.write(`STARTTLS\r\n`);
+    const startTls = await readResponse(socket);
+    if (!startTls.startsWith("220")) throw new Error(`STARTTLS failed: ${startTls}`);
 
-  for (const recipient of to) {
-    tlsSocket.write(`RCPT TO:<${recipient}>\r\n`);
-    const rcptResp = await readResponse(tlsSocket);
-    if (!rcptResp.startsWith("250") && !rcptResp.startsWith("251")) {
-      throw new Error(`RCPT TO ${recipient} failed: ${rcptResp}`);
+    // 既存ソケットをラップして TLS にアップグレード
+    tlsSocket = await withTimeout(
+      new Promise<tls.TLSSocket>((resolve, reject) => {
+        const s = tls.connect(
+          {
+            socket: socket!,
+            host: config.host,
+            servername: config.host,
+          },
+          () => resolve(s),
+        );
+        s.once("error", reject);
+      }),
+      SOCKET_IDLE_TIMEOUT_MS,
+      "tls.connect",
+    );
+    tlsSocket.setEncoding("utf8");
+    tlsSocket.setTimeout(SOCKET_IDLE_TIMEOUT_MS);
+    tlsSocket.on("timeout", () => {
+      tlsSocket?.destroy(new Error(`SMTP TLS socket idle for ${SOCKET_IDLE_TIMEOUT_MS}ms`));
+    });
+
+    tlsSocket.write(`EHLO boundarylabo.com\r\n`);
+    await readResponse(tlsSocket);
+
+    tlsSocket.write(`AUTH LOGIN\r\n`);
+    await readResponse(tlsSocket);
+    tlsSocket.write(`${Buffer.from(config.user, "utf8").toString("base64")}\r\n`);
+    await readResponse(tlsSocket);
+    tlsSocket.write(`${Buffer.from(config.pass, "utf8").toString("base64")}\r\n`);
+    const authResp = await readResponse(tlsSocket);
+    if (!authResp.startsWith("235")) throw new Error(`AUTH failed: ${authResp.slice(0, 200)}`);
+
+    tlsSocket.write(`MAIL FROM:<${config.from}>\r\n`);
+    const mailFromResp = await readResponse(tlsSocket);
+    if (!mailFromResp.startsWith("250")) throw new Error(`MAIL FROM failed: ${mailFromResp}`);
+
+    for (const recipient of to) {
+      tlsSocket.write(`RCPT TO:<${recipient}>\r\n`);
+      const rcptResp = await readResponse(tlsSocket);
+      if (!rcptResp.startsWith("250") && !rcptResp.startsWith("251")) {
+        throw new Error(`RCPT TO ${recipient} failed: ${rcptResp}`);
+      }
+    }
+
+    tlsSocket.write(`DATA\r\n`);
+    const dataResp = await readResponse(tlsSocket);
+    if (!dataResp.startsWith("354")) throw new Error(`DATA failed: ${dataResp}`);
+
+    const fromHeader = config.fromName
+      ? `${encodeHeader(config.fromName)} <${config.from}>`
+      : config.from;
+    const headerLines = [
+      `From: ${fromHeader}`,
+      `To: ${to.join(", ")}`,
+      `Subject: ${encodeHeader(subject)}`,
+      `Date: ${new Date().toUTCString()}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: text/plain; charset="UTF-8"`,
+      `Content-Transfer-Encoding: base64`,
+    ];
+    // CRLF.CRLF を避けるため base64 化、76 文字で wrap
+    const bodyB64 = Buffer.from(text, "utf8").toString("base64");
+    const wrapped = bodyB64.replace(/(.{1,76})/g, "$1\r\n").trimEnd();
+
+    tlsSocket.write(`${headerLines.join("\r\n")}\r\n\r\n${wrapped}\r\n.\r\n`);
+    const dataEnd = await readResponse(tlsSocket);
+    if (!dataEnd.startsWith("250")) throw new Error(`DATA end failed: ${dataEnd}`);
+
+    tlsSocket.write(`QUIT\r\n`);
+    try {
+      await readResponse(tlsSocket);
+    } catch {
+      // QUIT 後の close はサーバーが先に切ることがあるので無視
+    }
+  })();
+
+  try {
+    await withTimeout(inner, OVERALL_SMTP_TIMEOUT_MS, "overall");
+  } finally {
+    // 例外時 / 正常時いずれも socket を確実に閉じる
+    try {
+      tlsSocket?.destroy();
+    } catch {
+      /* noop */
+    }
+    try {
+      socket?.destroy();
+    } catch {
+      /* noop */
     }
   }
-
-  tlsSocket.write(`DATA\r\n`);
-  const dataResp = await readResponse(tlsSocket);
-  if (!dataResp.startsWith("354")) throw new Error(`DATA failed: ${dataResp}`);
-
-  const fromHeader = config.fromName
-    ? `${encodeHeader(config.fromName)} <${config.from}>`
-    : config.from;
-  const headerLines = [
-    `From: ${fromHeader}`,
-    `To: ${to.join(", ")}`,
-    `Subject: ${encodeHeader(subject)}`,
-    `Date: ${new Date().toUTCString()}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/plain; charset="UTF-8"`,
-    `Content-Transfer-Encoding: base64`,
-  ];
-  // CRLF.CRLF を避けるため base64 化、76 文字で wrap
-  const bodyB64 = Buffer.from(text, "utf8").toString("base64");
-  const wrapped = bodyB64.replace(/(.{1,76})/g, "$1\r\n").trimEnd();
-
-  tlsSocket.write(`${headerLines.join("\r\n")}\r\n\r\n${wrapped}\r\n.\r\n`);
-  const dataEnd = await readResponse(tlsSocket);
-  if (!dataEnd.startsWith("250")) throw new Error(`DATA end failed: ${dataEnd}`);
-
-  tlsSocket.write(`QUIT\r\n`);
-  try {
-    await readResponse(tlsSocket);
-  } catch {
-    // QUIT 後の close はサーバーが先に切ることがあるので無視
-  }
-  tlsSocket.destroy();
 }
 
 /**
