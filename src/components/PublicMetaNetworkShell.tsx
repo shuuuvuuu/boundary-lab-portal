@@ -216,7 +216,7 @@ export function PublicMetaNetworkShell({
             <div>
               <p className="text-sm font-semibold text-white">Contact</p>
               <p className="mt-2 text-sm text-slate-400">
-                portal.boundarylabo.com
+                ops.boundarylabo.com
               </p>
               <Link
                 href={isAuthenticated ? "/app" : "/login"}
