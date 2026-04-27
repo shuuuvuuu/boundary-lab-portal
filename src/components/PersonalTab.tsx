@@ -89,24 +89,11 @@ export function PersonalTab({
           ) : null}
         </Card>
 
-        <Card title="Hubs アカウント情報" subtitle="Reticulum DB と連携">
-          <HubsAccountBlock />
-        </Card>
-
         <Card
           title="お気に入りワールド"
           subtitle="個人メモ・おすすめ公開・レビューを管理"
         >
           <FavoriteWorldsPanel canManageCollections={canManageWorldCollections} />
-        </Card>
-
-        <Card
-          title="入室履歴"
-          subtitle="Phase 3b（WS サイドカー）導入後に有効化"
-        >
-          <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
-            Reticulum は入室履歴を永続化しないため、現在は未対応です。
-          </div>
         </Card>
       </div>
 
@@ -151,74 +138,6 @@ function EmptyState({ title, hint }: { title: string; hint?: string }) {
       {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
     </div>
   );
-}
-
-type HubsMeResponse = {
-  configured: boolean;
-  message?: string;
-  account: {
-    account_id: number;
-    email: string;
-    display_name: string | null;
-    identity_name: string | null;
-    created_at: string;
-  } | null;
-};
-
-function HubsAccountBlock() {
-  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
-  const [data, setData] = useState<HubsMeResponse | null>(null);
-
-  useEffect(() => {
-    fetch("/api/hubs/me")
-      .then(async (r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        setData((await r.json()) as HubsMeResponse);
-        setState("loaded");
-      })
-      .catch(() => setState("error"));
-  }, []);
-
-  if (state === "loading") {
-    return <p className="text-sm text-slate-400">読み込み中…</p>;
-  }
-  if (state === "error" || !data) {
-    return <p className="text-sm text-red-400">Hubs 情報の取得に失敗しました。</p>;
-  }
-  if (!data.configured) {
-    return (
-      <p className="text-sm text-slate-400">
-        Reticulum DB 未接続（{data.message ?? "管理者に問い合わせてください"}）。
-      </p>
-    );
-  }
-  if (!data.account) {
-    return (
-      <p className="text-sm text-slate-400">
-        {data.message ?? "Hubs アカウントが見つかりません"}。Hubs で同じメールアドレスでログイン後、再読み込みしてください。
-      </p>
-    );
-  }
-
-  const a = data.account;
-  return (
-    <dl className="grid grid-cols-[128px_1fr] gap-y-3 text-sm">
-      <DT>Hubs Account ID</DT>
-      <DD mono>{a.account_id}</DD>
-      <DT>Identity</DT>
-      <DD>{a.identity_name ?? "（未設定）"}</DD>
-      <DT>登録日</DT>
-      <DD>{new Date(a.created_at).toLocaleDateString("ja-JP")}</DD>
-    </dl>
-  );
-}
-
-function DT({ children }: { children: React.ReactNode }) {
-  return <dt className="text-xs text-slate-400">{children}</dt>;
-}
-
-function DD({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
-  return <dd className={mono ? "font-mono text-white" : "text-white"}>{children}</dd>;
 }
 
 function ProfileBlock({
