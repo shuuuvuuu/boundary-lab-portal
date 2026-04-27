@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  // Phase A3: ブログ記事 (content/blog/*.md) を standalone bundle に含める
+  outputFileTracingIncludes: {
+    "/blog/**": ["./content/blog/**/*"],
+  },
   experimental: {
     workerThreads: true,
     webpackBuildWorker: false,

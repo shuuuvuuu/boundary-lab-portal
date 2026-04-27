@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityClient } from "./ActivityClient";
 import { IssuesClient, type SentryServiceKey } from "./IssuesClient";
+import { JobsClient } from "./JobsClient";
 import { LogsClient } from "./LogsClient";
 import { MetricsClient } from "./MetricsClient";
+import { ServiceLogsClient } from "./ServiceLogsClient";
+import { TodosClient } from "./TodosClient";
 import { TracesClient } from "./TracesClient";
 import { UptimeClient } from "./UptimeClient";
 import { UsersClient } from "./UsersClient";
@@ -13,22 +16,28 @@ import { WebVitalsClient } from "./WebVitalsClient";
 type TabKey =
   | "issues"
   | "logs"
+  | "service-logs"
   | "traces"
   | "web-vitals"
   | "activity"
   | "metrics"
   | "users"
-  | "uptime";
+  | "uptime"
+  | "jobs"
+  | "todos";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "issues", label: "未解決 Issues" },
-  { key: "logs", label: "Logs" },
+  { key: "logs", label: "Logs (Sentry)" },
+  { key: "service-logs", label: "Logs (受信)" },
   { key: "traces", label: "Traces" },
   { key: "web-vitals", label: "Web Vitals" },
   { key: "activity", label: "Activity" },
   { key: "metrics", label: "Metrics" },
   { key: "users", label: "Users" },
   { key: "uptime", label: "Uptime" },
+  { key: "jobs", label: "Jobs" },
+  { key: "todos", label: "TODOs" },
 ];
 
 const SENTRY_SERVICES: SentryServiceKey[] = ["boundary", "rezona"];
@@ -38,12 +47,15 @@ function readInitialTab(): TabKey {
   const url = new URL(window.location.href);
   const raw = url.searchParams.get("tab");
   if (raw === "logs") return "logs";
+  if (raw === "service-logs") return "service-logs";
   if (raw === "traces") return "traces";
   if (raw === "web-vitals") return "web-vitals";
   if (raw === "activity") return "activity";
   if (raw === "metrics") return "metrics";
   if (raw === "users") return "users";
   if (raw === "uptime") return "uptime";
+  if (raw === "jobs") return "jobs";
+  if (raw === "todos") return "todos";
   return "issues";
 }
 
@@ -141,6 +153,9 @@ export function OpsTabs({
           active !== "activity" &&
           active !== "metrics" &&
           active !== "users" &&
+          active !== "jobs" &&
+          active !== "todos" &&
+          active !== "service-logs" &&
           showSentryServiceSelector && (
           <div className="ml-auto flex items-center gap-2 pb-1 text-xs text-slate-400">
             <span>Sentry Service</span>
@@ -166,6 +181,7 @@ export function OpsTabs({
 
       {active === "issues" && <IssuesClient service={service} />}
       {active === "logs" && <LogsClient service={service} />}
+      {active === "service-logs" && <ServiceLogsClient />}
       {active === "traces" && <TracesClient service={service} />}
       {active === "web-vitals" && <WebVitalsClient service={service} />}
       {active === "activity" && <ActivityClient />}
@@ -174,6 +190,8 @@ export function OpsTabs({
       {active === "uptime" && (
         <UptimeClient services={healthServices} defaultService={defaultHealthService} />
       )}
+      {active === "jobs" && <JobsClient />}
+      {active === "todos" && <TodosClient />}
     </div>
   );
 }
