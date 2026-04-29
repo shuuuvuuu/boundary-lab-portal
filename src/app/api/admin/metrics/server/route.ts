@@ -7,8 +7,9 @@ import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
  *
  * boundary-server / rezona-server の /api/admin/metrics をプロキシで呼ぶ。
  *
- * - 認証: 各 service の shared secret を x-boundary-internal-secret ヘッダで送る
- *   (rezona 側でも同名ヘッダを使用、横断時の取り違え防止のため統一)
+ * - 認証: service ごとに shared secret ヘッダ名を切り替える
+ *   - boundary: x-boundary-internal-secret
+ *   - rezona  : x-rezona-internal-secret (Phase 3c 仕様、rezona の admin-metrics endpoint が期待)
  * - 接続: 同 Droplet 内 Docker network 経由 (boundary は server:4000 / rezona は env で指定)
  * - portal の owner/guest 認可は外側 (withOwnerOrGuest) で完結
  */
@@ -88,9 +89,12 @@ export const GET = withRateLimit(
       type === "all" ? "" : `?type=${type}`
     }`;
 
+    const headerName =
+      service === "rezona" ? "x-rezona-internal-secret" : "x-boundary-internal-secret";
+
     try {
       const res = await fetch(upstreamUrl, {
-        headers: { "x-boundary-internal-secret": config.secret },
+        headers: { [headerName]: config.secret },
         cache: "no-store",
       });
       const body = await res.json();
