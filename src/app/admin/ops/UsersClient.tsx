@@ -170,7 +170,42 @@ export function UsersClient() {
       if (!json.data || !Array.isArray(json.data.users)) {
         throw new Error("レスポンス形式が想定外: data または users が欠落");
       }
-      setUsersState({ kind: "ready", resp: json.data });
+      // rezona / boundary の data 形式差を吸収する normalize 層
+      // rezona は room_ids / transport flat / sync オブジェクトなし、
+      // boundary は world_ids / sync オブジェクト有
+      const usersNormalized: UserSnapshot[] = json.data.users.map((u) => {
+        const anyU = u as Record<string, unknown>;
+        const livekit = Array.isArray(anyU.livekit) ? (anyU.livekit as LiveKitConn[]) : [];
+        const worldIds =
+          (anyU.world_ids as string[] | undefined) ??
+          (anyU.room_ids as string[] | undefined) ??
+          [];
+        const sync: SyncState =
+          (anyU.sync as SyncState | undefined) ?? {
+            transport: typeof anyU.transport === "string" ? (anyU.transport as string) : "unknown",
+            last_position_at:
+              typeof anyU.last_position_at === "number" ? (anyU.last_position_at as number) : null,
+            position_count_total:
+              typeof anyU.position_count_total === "number"
+                ? (anyU.position_count_total as number)
+                : 0,
+          };
+        return {
+          user_id: String(anyU.user_id ?? ""),
+          server_id: String(anyU.server_id ?? ""),
+          socket_count: typeof anyU.socket_count === "number" ? (anyU.socket_count as number) : 0,
+          socket_ids: Array.isArray(anyU.socket_ids) ? (anyU.socket_ids as string[]) : [],
+          world_ids: worldIds,
+          connected_at:
+            typeof anyU.connected_at === "number" ? (anyU.connected_at as number) : null,
+          livekit,
+          sync,
+        };
+      });
+      setUsersState({
+        kind: "ready",
+        resp: { ...json.data, users: usersNormalized },
+      });
     } catch (err) {
       setUsersState({
         kind: "error",
