@@ -146,15 +146,22 @@ export function MetricsClient() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as {
         type: string;
+        // boundary 旧形式: top-level に server/rooms/host
         server?: ServerMetrics;
         rooms?: RoomsMetrics;
         host?: HostSnapshot;
+        // rezona Phase 3c 形式: { type, server_id, data: { server, rooms, users } }
+        data?: {
+          server?: ServerMetrics;
+          rooms?: RoomsMetrics;
+          host?: HostSnapshot;
+        };
       };
       setState({
         kind: "ready",
-        server: json.server ?? null,
-        rooms: json.rooms ?? null,
-        host: json.host ?? null,
+        server: json.server ?? json.data?.server ?? null,
+        rooms: json.rooms ?? json.data?.rooms ?? null,
+        host: json.host ?? json.data?.host ?? null,
       });
     } catch (err) {
       setState({
@@ -207,7 +214,7 @@ export function MetricsClient() {
   return (
     <div className="space-y-4">
       <TabDescription>
-        boundary-server プロセスの<strong className="text-slate-200">
+        {`${service}-server`} プロセスの<strong className="text-slate-200">
           メモリ・CPU・event loop lag
         </strong>
         を 1 秒間隔・直近 60 秒で表示します。{" "}
@@ -294,7 +301,7 @@ export function MetricsClient() {
             </h3>
             <p className="mt-0.5 text-[11px] text-slate-500">
               boundary-server / portal / livekit / caddy / app / etc. 全部の合算。
-              boundary-server プロセス単独の値は下のセクションで確認。
+              {`${service}-server`} プロセス単独の値は下のセクションで確認。
             </p>
           </header>
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -398,11 +405,11 @@ export function MetricsClient() {
         </section>
       )}
 
-      {/* boundary-server プロセス単独 */}
+      {/* {`${service}-server`} プロセス単独 */}
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <header className="border-b border-slate-800 px-4 py-2">
           <h3 className="text-sm font-medium text-slate-200">
-            boundary-server プロセス単独
+            {`${service}-server`} プロセス単独
           </h3>
           <p className="mt-0.5 text-[11px] text-slate-500">
             host 全体ではなく、Node.js プロセスの内訳。直近 60 秒の時系列付き。
