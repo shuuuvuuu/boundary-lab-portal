@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { SentryServiceKey } from "./IssuesClient";
 import { TabDescription } from "./TabDescription";
+import {
+  TimeRangeSelector,
+  toSentryStatsPeriod,
+  type TimeRange,
+} from "./TimeRangeSelector";
 
 type LogEventItem = {
   id: string;
@@ -96,6 +101,7 @@ function buildClaudeContext(event: LogEventItem): string {
 export function LogsClient({ service }: { service: SentryServiceKey }) {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [level, setLevel] = useState<LevelFilter>("all");
+  const [period, setPeriod] = useState<TimeRange>("24h");
   const [refreshing, setRefreshing] = useState(false);
   const [copyHint, setCopyHint] = useState<string | null>(null);
 
@@ -106,6 +112,7 @@ export function LogsClient({ service }: { service: SentryServiceKey }) {
         const params = new URLSearchParams();
         if (filter !== "all") params.set("level", filter);
         params.set("service", service);
+        params.set("statsPeriod", toSentryStatsPeriod(period));
         const res = await fetch(`/api/admin/sentry/events?${params.toString()}`, {
           cache: "no-store",
         });
@@ -129,7 +136,7 @@ export function LogsClient({ service }: { service: SentryServiceKey }) {
         });
       }
     },
-    [service],
+    [service, period],
   );
 
   useEffect(() => {
@@ -186,6 +193,7 @@ export function LogsClient({ service }: { service: SentryServiceKey }) {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
         <h2 className="font-medium">Logs (pino warn/error → Sentry)</h2>
         <div className="flex items-center gap-2">
+          <TimeRangeSelector value={period} onChange={setPeriod} />
           <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5 text-xs">
             {(["all", "warning", "error"] as const).map((opt) => (
               <button

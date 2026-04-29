@@ -31,6 +31,22 @@ function parseHours(url: URL): number {
   return Math.min(n, 24 * 30);
 }
 
+function parsePeriod(url: URL): { label: string; sinceIso: string | null; hours: number | null } | null {
+  const raw = url.searchParams.get("period");
+  if (!raw) return null;
+  if (raw === "1h") {
+    return { label: "1h", sinceIso: new Date(Date.now() - 3600_000).toISOString(), hours: 1 };
+  }
+  if (raw === "7h") {
+    return { label: "7h", sinceIso: new Date(Date.now() - 7 * 3600_000).toISOString(), hours: 7 };
+  }
+  if (raw === "24h") {
+    return { label: "24h", sinceIso: new Date(Date.now() - 24 * 3600_000).toISOString(), hours: 24 };
+  }
+  if (raw === "all") return { label: "all", sinceIso: null, hours: null };
+  return null;
+}
+
 function parseService(url: URL): string | null {
   const raw = url.searchParams.get("service");
   if (!raw) return null;
@@ -95,7 +111,17 @@ export const GET = withRateLimit(
         { status: 400 },
       );
     }
-    const hours = parseHours(url);
+    const period = parsePeriod(url);
+    let hours: number | null;
+    let sinceIso: string | null;
+    if (period) {
+      hours = period.hours;
+      sinceIso = period.sinceIso;
+    } else {
+      const parsedHours = parseHours(url);
+      hours = parsedHours;
+      sinceIso = new Date(Date.now() - parsedHours * 60 * 60 * 1000).toISOString();
+    }
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -110,14 +136,14 @@ export const GET = withRateLimit(
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-    const { data, error } = await supabase
+    let q = supabase
       .from("service_health_checks")
       .select("id, service, endpoint, status_code, response_time_ms, ok, error_message, checked_at")
       .eq("service", service)
-      .gte("checked_at", since)
       .order("checked_at", { ascending: false })
       .limit(1000);
+    if (sinceIso !== null) q = q.gte("checked_at", sinceIso);
+    const { data, error } = await q;
 
     if (error) {
       console.error("[uptime] select failed:", error.message);

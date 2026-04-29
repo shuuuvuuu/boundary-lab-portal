@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TabDescription } from "./TabDescription";
+import { TimeRangeSelector, type TimeRange } from "./TimeRangeSelector";
 
 type LogRow = {
   id: string;
@@ -40,6 +41,7 @@ export function ServiceLogsClient() {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [source, setSource] = useState<string>("");
   const [level, setLevel] = useState<string>("all");
+  const [period, setPeriod] = useState<TimeRange>("24h");
   const [deleting, setDeleting] = useState<false | "24h" | "7d" | "all">(false);
   const [confirmAllOpen, setConfirmAllOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function ServiceLogsClient() {
       const params = new URLSearchParams();
       if (source) params.set("source", source);
       if (level !== "all") params.set("level", level);
-      params.set("hours", "24");
+      params.set("period", period);
       params.set("limit", "200");
       const res = await fetch(`/api/admin/logs?${params.toString()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -65,7 +67,7 @@ export function ServiceLogsClient() {
         message: err instanceof Error ? err.message : "unknown error",
       });
     }
-  }, [source, level]);
+  }, [source, level, period]);
 
   const runDelete = useCallback(
     async (kind: "24h" | "7d" | "all") => {
@@ -144,6 +146,7 @@ export function ServiceLogsClient() {
               ))}
             </select>
           </div>
+          <TimeRangeSelector value={period} onChange={setPeriod} />
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -195,7 +198,7 @@ export function ServiceLogsClient() {
           )}
           {state.kind === "ready" && logs.length === 0 && (
             <p className="px-4 py-6 text-sm text-slate-400">
-              該当するログはありません (24h)。受信エンドポイント未設定の場合、env{" "}
+              該当するログはありません。受信エンドポイント未設定の場合、env{" "}
               <code>PORTAL_LOG_INGEST_TOKEN</code> を確認してください。
             </p>
           )}

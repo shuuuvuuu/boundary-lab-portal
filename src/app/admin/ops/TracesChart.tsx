@@ -13,6 +13,7 @@ import {
 } from "recharts";
 
 import type { SentryServiceKey } from "./IssuesClient";
+import { toSentryStatsPeriod, type TimeRange } from "./TimeRangeSelector";
 
 type SeriesPoint = { time: number; value: number };
 
@@ -38,14 +39,14 @@ type FetchState =
 
 type Props = {
   service: SentryServiceKey;
-  statsPeriod: "1h" | "24h" | "7d";
+  statsPeriod: TimeRange;
 };
 
 const COLORS = ["#60a5fa", "#34d399", "#f472b6", "#fbbf24", "#a78bfa", "#f87171", "#22d3ee"];
 
 function formatTimeLabel(unixSec: number, statsPeriod: string): string {
   const d = new Date(unixSec * 1000);
-  if (statsPeriod === "1h" || statsPeriod === "24h") {
+  if (statsPeriod === "1h" || statsPeriod === "7h" || statsPeriod === "24h") {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
   }
   return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -71,7 +72,11 @@ export function TracesChart({ service, statsPeriod }: Props) {
   useEffect(() => {
     let cancelled = false;
     setState({ kind: "loading" });
-    const params = new URLSearchParams({ service, statsPeriod, yAxis });
+    const params = new URLSearchParams({
+      service,
+      statsPeriod: toSentryStatsPeriod(statsPeriod),
+      yAxis,
+    });
     fetch(`/api/admin/sentry/transactions-stats?${params.toString()}`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

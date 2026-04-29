@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { SentryServiceKey } from "./IssuesClient";
 import { TabDescription } from "./TabDescription";
+import {
+  TimeRangeSelector,
+  toSentryStatsPeriod,
+  type TimeRange,
+} from "./TimeRangeSelector";
 import { TraceDetailPanel } from "./TraceDetailPanel";
 import { TracesChart } from "./TracesChart";
 
@@ -30,8 +35,6 @@ type FetchState =
       configured: boolean;
     }
   | { kind: "error"; message: string };
-
-type PeriodOption = "1h" | "24h" | "7d";
 
 function projectTagClass(tag: string): string {
   if (tag === "server") return "bg-indigo-500/20 text-indigo-300 border-indigo-500/30";
@@ -70,18 +73,18 @@ function p95Class(ms: number): string {
 
 export function TracesClient({ service }: { service: SentryServiceKey }) {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
-  const [period, setPeriod] = useState<PeriodOption>("24h");
+  const [period, setPeriod] = useState<TimeRange>("24h");
   const [refreshing, setRefreshing] = useState(false);
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ projectTag: string; transaction: string } | null>(null);
 
   const fetchTransactions = useCallback(
-    async (statsPeriod: PeriodOption) => {
+    async (statsPeriod: TimeRange) => {
       setState({ kind: "loading" });
       try {
         const params = new URLSearchParams();
         params.set("service", service);
-        params.set("statsPeriod", statsPeriod);
+        params.set("statsPeriod", toSentryStatsPeriod(statsPeriod));
         const res = await fetch(`/api/admin/sentry/transactions?${params.toString()}`, {
           cache: "no-store",
         });
@@ -142,7 +145,7 @@ export function TracesClient({ service }: { service: SentryServiceKey }) {
     <div className="space-y-4">
       <TabDescription>
         API・socket.io イベント・SPA ページロードの <strong className="text-slate-200">transaction 単位での性能サマリ</strong>
-        （実行回数、平均、p50、p95、失敗率）を表示します。期間切替は 1h / 24h / 7d。
+        （実行回数、平均、p50、p95、失敗率）を表示します。期間切替は 1h / 7h / 24h / 全期間 (90d)。
         下のグラフは上位 5 transaction の時系列推移、表は同期間の集計値。
         Developer 無料プランは spans 上限 10K/月のため、`SENTRY_TRACES_SAMPLE_RATE`
         を低めに設定している場合は実数が少なく見えます。
@@ -152,22 +155,7 @@ export function TracesClient({ service }: { service: SentryServiceKey }) {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
         <h2 className="font-medium">Traces (transaction サマリ)</h2>
         <div className="flex items-center gap-2">
-          <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5 text-xs">
-            {(["1h", "24h", "7d"] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setPeriod(opt)}
-                className={`rounded px-2 py-1 transition ${
-                  period === opt
-                    ? "bg-slate-700 text-slate-100"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
+          <TimeRangeSelector value={period} onChange={setPeriod} />
           <button
             onClick={handleRefresh}
             disabled={refreshing || state.kind === "loading"}

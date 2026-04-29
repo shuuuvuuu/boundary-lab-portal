@@ -14,6 +14,11 @@ import {
 
 import type { SentryServiceKey } from "./IssuesClient";
 import { TabDescription } from "./TabDescription";
+import {
+  TimeRangeSelector,
+  toSentryStatsPeriod,
+  type TimeRange,
+} from "./TimeRangeSelector";
 
 type Vital = "lcp" | "fcp" | "cls" | "inp" | "ttfb";
 
@@ -40,8 +45,6 @@ type FetchState =
       configured: boolean;
     }
   | { kind: "error"; message: string };
-
-type PeriodOption = "1h" | "24h" | "7d";
 
 /**
  * Core Web Vitals threshold (Google 2026 ガイド準拠)。
@@ -95,7 +98,7 @@ function formatVitalValue(value: number | undefined, vital: Vital): string {
 
 function formatTimeLabel(unixSec: number, statsPeriod: string): string {
   const d = new Date(unixSec * 1000);
-  if (statsPeriod === "1h" || statsPeriod === "24h") {
+  if (statsPeriod === "1h" || statsPeriod === "7h" || statsPeriod === "24h") {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
   }
   return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -103,13 +106,17 @@ function formatTimeLabel(unixSec: number, statsPeriod: string): string {
 
 export function WebVitalsClient({ service }: { service: SentryServiceKey }) {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
-  const [period, setPeriod] = useState<PeriodOption>("24h");
+  const [period, setPeriod] = useState<TimeRange>("24h");
   const [selectedVital, setSelectedVital] = useState<Vital>("lcp");
 
   useEffect(() => {
     let cancelled = false;
     setState({ kind: "loading" });
-    const params = new URLSearchParams({ service, statsPeriod: period, vital: selectedVital });
+    const params = new URLSearchParams({
+      service,
+      statsPeriod: toSentryStatsPeriod(period),
+      vital: selectedVital,
+    });
     fetch(`/api/admin/sentry/web-vitals?${params.toString()}`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -155,22 +162,7 @@ export function WebVitalsClient({ service }: { service: SentryServiceKey }) {
       </TabDescription>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5 text-xs">
-          {(["1h", "24h", "7d"] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setPeriod(opt)}
-              className={`rounded px-2 py-1 transition ${
-                period === opt
-                  ? "bg-slate-700 text-slate-100"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
+        <TimeRangeSelector value={period} onChange={setPeriod} />
         {summary && (
           <span className="text-xs text-slate-400">
             sample 数: <span className="text-slate-200">{summary.count.toLocaleString()}</span>

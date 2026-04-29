@@ -15,7 +15,8 @@ import { attachSentryLinks } from "@/lib/sentry/links";
  *   - service      : boundary | rezona (複数は `,` 区切り、省略時は全て)
  *   - event_type   : user_action | api_request | server_event (省略時は全て)
  *   - user_id      : 特定ユーザー絞り込み (完全一致)
- *   - statsPeriod  : 1h | 24h | 7d (default 24h)
+ *   - period       : 1h | 7h | 24h | all (default 24h)
+ *   - statsPeriod  : 1h | 24h | 7d (backward compatible)
  *   - limit        : 1〜500 (default 200)
  *   - action       : 完全一致または前方一致 (`GET%` など wildcard 許容)
  *
@@ -37,13 +38,19 @@ type ActivityRow = {
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-function parsePeriod(url: URL): { label: string; sinceIso: string } {
-  const raw = url.searchParams.get("statsPeriod") ?? "24h";
-  const ms =
-    raw === "1h" ? 3600_000 : raw === "7d" ? 7 * 86400_000 : 24 * 3600_000;
-  const label = raw === "1h" ? "1h" : raw === "7d" ? "7d" : "24h";
-  const sinceIso = new Date(Date.now() - ms).toISOString();
-  return { label, sinceIso };
+function parsePeriod(url: URL): { label: string; sinceIso: string | null } {
+  const raw = url.searchParams.get("period") ?? url.searchParams.get("statsPeriod") ?? "24h";
+  if (raw === "all") return { label: "all", sinceIso: null };
+  if (raw === "1h") {
+    return { label: "1h", sinceIso: new Date(Date.now() - 3600_000).toISOString() };
+  }
+  if (raw === "7h") {
+    return { label: "7h", sinceIso: new Date(Date.now() - 7 * 3600_000).toISOString() };
+  }
+  if (raw === "7d") {
+    return { label: "7d", sinceIso: new Date(Date.now() - 7 * 86400_000).toISOString() };
+  }
+  return { label: "24h", sinceIso: new Date(Date.now() - 24 * 3600_000).toISOString() };
 }
 
 function parseServices(url: URL): string[] | null {
@@ -92,10 +99,10 @@ export const GET = withRateLimit(
     let q = supabase
       .from("activity_events")
       .select("*")
-      .gte("occurred_at", period.sinceIso)
       .order("occurred_at", { ascending: false })
       .limit(limit);
 
+    if (period.sinceIso !== null) q = q.gte("occurred_at", period.sinceIso);
     if (services) q = q.in("service", services);
     if (eventType) q = q.eq("event_type", eventType);
     if (userId) q = q.eq("user_id", userId);

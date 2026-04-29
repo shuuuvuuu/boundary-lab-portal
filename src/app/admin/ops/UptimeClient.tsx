@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { TabDescription } from "./TabDescription";
+import { TimeRangeSelector, type TimeRange } from "./TimeRangeSelector";
 
 type CheckRow = {
   id: string;
@@ -46,7 +47,7 @@ type Summary = {
 
 type UptimePayload = {
   service: string;
-  hours: number;
+  hours: number | null;
   configured: boolean;
   endpoint: string | null;
   interval_seconds: number | null;
@@ -59,13 +60,6 @@ type FetchState =
   | { kind: "loading" }
   | { kind: "ready"; data: UptimePayload; loadedAt: number }
   | { kind: "error"; message: string };
-
-const HOURS_OPTIONS: Array<{ key: string; label: string; hours: number }> = [
-  { key: "1h", label: "1h", hours: 1 },
-  { key: "6h", label: "6h", hours: 6 },
-  { key: "24h", label: "24h", hours: 24 },
-  { key: "7d", label: "7d", hours: 24 * 7 },
-];
 
 function formatRelative(iso: string | null): string {
   if (!iso) return "—";
@@ -93,7 +87,7 @@ export function UptimeClient({
   defaultService: string;
 }) {
   const [service, setService] = useState<string>(defaultService);
-  const [hours, setHours] = useState<number>(24);
+  const [period, setPeriod] = useState<TimeRange>("24h");
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [probing, setProbing] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
@@ -103,7 +97,7 @@ export function UptimeClient({
     try {
       const params = new URLSearchParams({
         service,
-        hours: String(hours),
+        period,
       });
       const res = await fetch(`/api/admin/ops/uptime?${params.toString()}`, {
         cache: "no-store",
@@ -117,7 +111,7 @@ export function UptimeClient({
         message: err instanceof Error ? err.message : "unknown error",
       });
     }
-  }, [service, hours]);
+  }, [service, period]);
 
   useEffect(() => {
     fetchUptime();
@@ -200,22 +194,7 @@ export function UptimeClient({
           </select>
         </label>
 
-        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5 text-xs">
-          {HOURS_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setHours(opt.hours)}
-              className={`rounded px-2 py-1 transition ${
-                hours === opt.hours
-                  ? "bg-slate-700 text-slate-100"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <TimeRangeSelector value={period} onChange={setPeriod} />
 
         <div className="ml-auto flex gap-2">
           <button
@@ -330,7 +309,7 @@ export function UptimeClient({
       {data && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/40">
           <header className="border-b border-slate-800 px-4 py-3 text-sm font-medium">
-            履歴（直近 {data.hours}h、最新 100 件）
+            履歴（{data.hours === null ? "全期間" : `直近 ${data.hours}h`}、最新 100 件）
           </header>
           {checks.length === 0 ? (
             <p className="px-4 py-6 text-sm text-slate-400">
