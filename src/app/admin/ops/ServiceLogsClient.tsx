@@ -40,6 +40,9 @@ export function ServiceLogsClient() {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [source, setSource] = useState<string>("");
   const [level, setLevel] = useState<string>("all");
+  const [deleting, setDeleting] = useState<false | "24h" | "7d" | "all">(false);
+  const [confirmAllOpen, setConfirmAllOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -64,12 +67,43 @@ export function ServiceLogsClient() {
     }
   }, [source, level]);
 
+  const runDelete = useCallback(
+    async (kind: "24h" | "7d" | "all") => {
+      setDeleting(kind);
+      setDeleteError(null);
+      try {
+        const params = new URLSearchParams();
+        if (kind === "all") {
+          params.set("all", "true");
+        } else {
+          const ms = kind === "24h" ? 86_400_000 : 7 * 86_400_000;
+          params.set("before", new Date(Date.now() - ms).toISOString());
+        }
+        const res = await fetch(`/api/admin/logs?${params.toString()}`, {
+          method: "DELETE",
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(body?.error ?? `HTTP ${res.status}`);
+        }
+        await load();
+      } catch (err) {
+        setDeleteError(err instanceof Error ? err.message : "unknown error");
+      } finally {
+        setDeleting(false);
+      }
+    },
+    [load],
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
 
   const logs = state.kind === "ready" ? state.logs : [];
   const sources = state.kind === "ready" ? state.sources : [];
+  const deleteDisabled = deleting !== false || state.kind === "loading";
 
   return (
     <div className="space-y-4">
@@ -110,15 +144,47 @@ export function ServiceLogsClient() {
               ))}
             </select>
           </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={state.kind === "loading"}
-            className="ml-auto rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:opacity-60"
-          >
-            {state.kind === "loading" ? "読み込み中…" : "再読込"}
-          </button>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void runDelete("24h")}
+              disabled={deleteDisabled}
+              className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:opacity-60"
+            >
+              {deleting === "24h" ? "削除中…" : "24h 以前を削除"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runDelete("7d")}
+              disabled={deleteDisabled}
+              className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:opacity-60"
+            >
+              {deleting === "7d" ? "削除中…" : "7d 以前を削除"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmAllOpen(true)}
+              disabled={deleteDisabled}
+              className="rounded border border-red-700 bg-red-900/40 px-3 py-1 text-xs text-red-200 hover:bg-red-900/60 disabled:opacity-60"
+            >
+              {deleting === "all" ? "削除中…" : "全削除"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={deleteDisabled}
+              className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:opacity-60"
+            >
+              {state.kind === "loading" ? "読み込み中…" : "再読込"}
+            </button>
+          </div>
         </header>
+
+        {deleteError && (
+          <p className="border-b border-slate-800 px-4 py-2 text-xs text-red-300">
+            削除エラー: {deleteError}
+          </p>
+        )}
 
         <div className="divide-y divide-slate-800">
           {state.kind === "loading" && (
@@ -154,6 +220,49 @@ export function ServiceLogsClient() {
           ))}
         </div>
       </section>
+
+      {confirmAllOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setConfirmAllOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="service-logs-delete-all-title"
+            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="service-logs-delete-all-title" className="text-lg font-medium text-slate-100">
+              全件削除しますか?
+            </h3>
+            <p className="mt-2 text-sm text-slate-400">
+              service_logs テーブルの全 row が削除されます。この操作は取り消せません。
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmAllOpen(false)}
+                disabled={deleting !== false}
+                className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setConfirmAllOpen(false);
+                  await runDelete("all");
+                }}
+                disabled={deleting !== false}
+                className="rounded border border-red-700 bg-red-900/60 px-3 py-1 text-xs text-red-100 hover:bg-red-900 disabled:opacity-60"
+              >
+                OK (全削除)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
