@@ -38,19 +38,47 @@ type IngestRow = {
 
 const LEVELS = new Set(["debug", "info", "warn", "error", "fatal"]);
 
+/**
+ * pino 数値 level を IngestRow level 文字列に変換する。
+ * pino 標準: 10=trace 20=debug 30=info 40=warn 50=error 60=fatal
+ */
+function pinoLevelToString(n: number): IngestRow["level"] {
+  if (n < 30) return "debug"; // trace + debug を debug に統合
+  if (n < 40) return "info";
+  if (n < 50) return "warn";
+  if (n < 60) return "error";
+  return "fatal";
+}
+
 function normalize(raw: unknown): IngestRow | string {
   if (!raw || typeof raw !== "object") return "non-object record";
   const r = raw as Record<string, unknown>;
-  const source = typeof r.source === "string" ? r.source.trim() : "";
-  if (!source) return "missing 'source'";
+
+  // source: 明示 r.source 優先、なければ pino base field の r.service フォールバック
+  // (rezona の baseLogger は { service: 'rezona-server', ... } を base field に持つ)
+  let source = "";
+  if (typeof r.source === "string") source = r.source.trim();
+  if (!source && typeof r.service === "string") source = r.service.trim();
+  if (!source) return "missing 'source' (or 'service')";
   if (source.length > 80) return "'source' too long";
   if (!/^[a-zA-Z0-9_:.-]+$/.test(source)) return "invalid 'source' chars";
 
-  const level = typeof r.level === "string" ? r.level : "";
-  if (!LEVELS.has(level)) return "invalid 'level'";
+  // level: 文字列 ("warn") も pino 数値 (40) も受け付ける
+  let level: IngestRow["level"];
+  if (typeof r.level === "string" && LEVELS.has(r.level)) {
+    level = r.level as IngestRow["level"];
+  } else if (typeof r.level === "number") {
+    level = pinoLevelToString(r.level);
+  } else {
+    return "invalid 'level'";
+  }
 
-  const msgRaw = typeof r.message === "string" ? r.message : null;
-  if (!msgRaw) return "missing 'message'";
+  // message: r.message 優先、なければ pino 標準の r.msg → r.event フォールバック
+  let msgRaw: string | null = null;
+  if (typeof r.message === "string" && r.message) msgRaw = r.message;
+  else if (typeof r.msg === "string" && r.msg) msgRaw = r.msg;
+  else if (typeof r.event === "string" && r.event) msgRaw = r.event;
+  if (!msgRaw) return "missing 'message' (or 'msg' / 'event')";
   const message = msgRaw.length > MAX_MESSAGE_LEN
     ? `${msgRaw.slice(0, MAX_MESSAGE_LEN)}…(truncated)`
     : msgRaw;
@@ -64,11 +92,15 @@ function normalize(raw: unknown): IngestRow | string {
     "pid",
     "hostname",
     "service_id",
+    "server_id",
     "request_id",
     "trace_id",
     "user_id",
     "room_id",
     "release",
+    "event",
+    "route",
+    "reason",
   ]) {
     if (r[k] !== undefined) {
       context[k] = r[k];
@@ -87,7 +119,7 @@ function normalize(raw: unknown): IngestRow | string {
 
   return {
     source,
-    level: level as IngestRow["level"],
+    level,
     message,
     context,
     occurred_at: occurredAt.toISOString(),
