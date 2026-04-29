@@ -6,7 +6,7 @@ import { evaluateAndAlert, type HealthCheckRecord } from "@/lib/health-alerts";
  *
  * env:
  *   HEALTH_CHECK_ENABLED=true
- *   HEALTH_CHECK_TARGETS=boundary|https://boundarylabo.com/api/healthz|60;rezona|https://.../api/health|60
+ *   HEALTH_CHECK_TARGETS=boundary|https://boundarylabo.com/api/healthz|60;rezona-admin|https://.../api/health|60|REZONA_ADMIN_HEALTH_TOKEN
  *
  * 各ターゲットを setInterval で fetch（5 秒 timeout）→ service_health_checks に INSERT →
  * evaluateAndAlert で連続失敗/復旧通知。
@@ -21,6 +21,7 @@ export type HealthTarget = {
   service: string;
   url: string;
   intervalSeconds: number;
+  bearerEnv?: string;
 };
 
 export function parseTargets(raw: string | undefined): HealthTarget[] {
@@ -35,11 +36,14 @@ export function parseTargets(raw: string | undefined): HealthTarget[] {
     }
     const [service, url, intervalRaw] = parts;
     if (!service || !url) continue;
+    const bearerEnvRaw = parts[3]?.trim();
+    const bearerEnv =
+      bearerEnvRaw && bearerEnvRaw.length > 0 ? bearerEnvRaw : undefined;
     const intervalSeconds = Math.max(
       MIN_INTERVAL_SECONDS,
       Number(intervalRaw ?? "60") || 60,
     );
-    targets.push({ service, url, intervalSeconds });
+    targets.push({ service, url, intervalSeconds, bearerEnv });
   }
   return targets;
 }
@@ -57,11 +61,20 @@ async function runOnce(target: HealthTarget): Promise<HealthCheckRecord> {
   const start = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const headers: Record<string, string> = {
+    Accept: "application/json, text/plain;q=0.9, */*;q=0.1",
+  };
+  if (target.bearerEnv) {
+    const token = process.env[target.bearerEnv];
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  }
   try {
     const res = await fetch(target.url, {
       signal: controller.signal,
       cache: "no-store",
-      headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
+      headers,
     });
     const elapsed = Date.now() - start;
     return {
@@ -124,6 +137,24 @@ async function persist(record: HealthCheckRecord): Promise<boolean> {
  * 戻り値は DB 書き込み成否に関係なく health check の record。
  */
 export async function probeAndRecord(target: HealthTarget): Promise<HealthCheckRecord> {
+  if (target.bearerEnv) {
+    const token = process.env[target.bearerEnv];
+    if (!token) {
+      console.warn(
+        `[health-poller] target=${target.service} bearer env '${target.bearerEnv}' is not set; skipping this probe`,
+      );
+      return {
+        service: target.service,
+        endpoint: target.url,
+        status_code: null,
+        response_time_ms: 0,
+        ok: false,
+        error_message: `bearer env '${target.bearerEnv}' not set`,
+        checked_at: new Date().toISOString(),
+      };
+    }
+  }
+
   const record = await runOnce(target);
   await persist(record); // 失敗しても evaluate は続ける
   try {
