@@ -166,7 +166,10 @@ export function UsersClient() {
         }
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { data: UsersResponse };
+      const json = (await res.json()) as { data?: UsersResponse };
+      if (!json.data || !Array.isArray(json.data.users)) {
+        throw new Error("レスポンス形式が想定外: data または users が欠落");
+      }
       setUsersState({ kind: "ready", resp: json.data });
     } catch (err) {
       setUsersState({
@@ -209,7 +212,7 @@ export function UsersClient() {
     if (selected) fetchActivity(selected);
   }, [selected, fetchActivity]);
 
-  const users = usersState.kind === "ready" ? usersState.resp.users : [];
+  const users = usersState.kind === "ready" ? (usersState.resp.users ?? []) : [];
   const selectedUser = useMemo(
     () => users.find((u) => u.user_id === selected) ?? null,
     [users, selected],
