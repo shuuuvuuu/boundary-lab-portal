@@ -238,6 +238,7 @@ export async function listEvents(
     level?: "warning" | "error";
     limit?: number;
     service?: SentryService;
+    statsPeriod?: string;
   } = {},
 ): Promise<SentryLogEvent[]> {
   const service = opts.service ?? "boundary";
@@ -245,13 +246,15 @@ export async function listEvents(
   if (!config) return [];
 
   const limit = opts.limit ?? 50;
-  const cacheKey = `events:${service}:${config.org}:${projectSlug}:${opts.level ?? "all"}:${limit}`;
+  const statsPeriod = opts.statsPeriod ?? "24h";
+  const cacheKey = `events:${service}:${config.org}:${projectSlug}:${opts.level ?? "all"}:${limit}:${statsPeriod}`;
   const cached = getCached<SentryLogEvent[]>(cacheKey);
   if (cached) return cached;
 
   const params = new URLSearchParams({
     limit: String(limit * 3),
     full: "true",
+    statsPeriod,
   });
   const raw = await sentryFetch<SentryLogEvent[]>(
     `/projects/${config.org}/${projectSlug}/events/?${params.toString()}`,

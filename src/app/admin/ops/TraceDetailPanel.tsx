@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { SentryServiceKey } from "./IssuesClient";
+import { toSentryStatsPeriod, type TimeRange } from "./TimeRangeSelector";
 
 type Span = {
   span_id: string;
@@ -36,7 +37,7 @@ type Props = {
   service: SentryServiceKey;
   projectTag: string;
   transaction: string;
-  statsPeriod: string;
+  statsPeriod: TimeRange;
   onClose: () => void;
 };
 
@@ -74,7 +75,7 @@ export function TraceDetailPanel({
       service,
       projectTag,
       transaction,
-      statsPeriod,
+      statsPeriod: toSentryStatsPeriod(statsPeriod),
     });
     fetch(`/api/admin/sentry/transaction-detail?${params.toString()}`, { cache: "no-store" })
       .then(async (res) => {

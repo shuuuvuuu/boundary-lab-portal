@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TabDescription } from "./TabDescription";
+import { TimeRangeSelector, type TimeRange } from "./TimeRangeSelector";
 
 type JobSummary =
   | {
@@ -71,13 +72,14 @@ export function JobsClient() {
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [period, setPeriod] = useState<TimeRange>("24h");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [jobsRes, runsRes] = await Promise.all([
         fetch("/api/admin/jobs", { cache: "no-store" }),
-        fetch("/api/admin/jobs/runs?limit=50", { cache: "no-store" }),
+        fetch(`/api/admin/jobs/runs?limit=50&period=${period}`, { cache: "no-store" }),
       ]);
       if (jobsRes.ok) {
         const json = (await jobsRes.json()) as {
@@ -94,7 +96,7 @@ export function JobsClient() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [period]);
 
   useEffect(() => {
     void load();
@@ -155,14 +157,17 @@ export function JobsClient() {
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
           <h2 className="font-medium">登録済ジョブ</h2>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading}
-            className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:opacity-60"
-          >
-            {loading ? "更新中…" : "再読込"}
-          </button>
+          <div className="flex items-center gap-2">
+            <TimeRangeSelector value={period} onChange={setPeriod} />
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:opacity-60"
+            >
+              {loading ? "更新中…" : "再読込"}
+            </button>
+          </div>
         </header>
         <ul className="divide-y divide-slate-800">
           {jobs.map((job) => (
@@ -196,7 +201,7 @@ export function JobsClient() {
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <header className="border-b border-slate-800 px-4 py-3">
-          <h2 className="font-medium">直近 50 実行</h2>
+          <h2 className="font-medium">直近の実行 (期間内、最大 50 件)</h2>
         </header>
         <ul className="divide-y divide-slate-800">
           {runs.map((run) => (

@@ -25,6 +25,12 @@ function parseCategory(url: URL): CategoryFilter {
   return "all";
 }
 
+function parseStatsPeriod(url: URL): string {
+  const raw = url.searchParams.get("statsPeriod") ?? "";
+  if (/^\d{1,4}[mhd]$/.test(raw)) return raw;
+  return "24h";
+}
+
 /**
  * Sentry の issues API に渡す `query` 文字列を組み立てる。
  *  - all          : `is:unresolved`
@@ -58,6 +64,7 @@ export const GET = withRateLimit(
     const url = new URL(request.url);
     const service = parseService(url);
     const category = parseCategory(url);
+    const statsPeriod = parseStatsPeriod(url);
     if (service === null) {
       return NextResponse.json(
         { error: "invalid service (must be 'boundary' or 'rezona')" },
@@ -80,7 +87,7 @@ export const GET = withRateLimit(
       const query = queryForCategory(category);
       const results = await Promise.all(
         config.projects.map((slug) =>
-          listIssues(slug, { service, query }).catch((err: Error) => {
+          listIssues(slug, { service, query, statsPeriod }).catch((err: Error) => {
             console.error(`[sentry] ${service}/${slug} issues failed:`, err.message);
             return [] as SentryIssue[];
           }),

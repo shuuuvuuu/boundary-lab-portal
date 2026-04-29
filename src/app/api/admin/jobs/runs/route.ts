@@ -15,6 +15,7 @@ export const GET = withRateLimit(
   withOwnerOrGuest(async (request) => {
     const url = new URL(request.url);
     const job = url.searchParams.get("job");
+    const period = url.searchParams.get("period");
     const limitRaw = url.searchParams.get("limit");
     const limit = Math.max(1, Math.min(200, Number(limitRaw ?? "50") || 50));
 
@@ -40,6 +41,13 @@ export const GET = withRateLimit(
       .order("started_at", { ascending: false })
       .limit(limit);
     if (job) q = q.eq("job_name", job);
+    if (period === "1h") {
+      q = q.gte("started_at", new Date(Date.now() - 3600_000).toISOString());
+    } else if (period === "7h") {
+      q = q.gte("started_at", new Date(Date.now() - 7 * 3600_000).toISOString());
+    } else if (period === "24h") {
+      q = q.gte("started_at", new Date(Date.now() - 24 * 3600_000).toISOString());
+    }
 
     const { data, error } = await q;
     if (error) {

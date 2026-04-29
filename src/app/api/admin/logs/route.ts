@@ -19,7 +19,24 @@ export const GET = withRateLimit(
     const url = new URL(request.url);
     const source = url.searchParams.get("source");
     const level = url.searchParams.get("level") ?? "all";
-    const hours = Math.max(1, Math.min(7 * 24, Number(url.searchParams.get("hours") ?? "24") || 24));
+    const periodRaw = url.searchParams.get("period");
+    let hours = 24;
+    let sinceIso: string | null;
+    if (periodRaw === "1h") {
+      hours = 1;
+      sinceIso = new Date(Date.now() - 3600_000).toISOString();
+    } else if (periodRaw === "7h") {
+      hours = 7;
+      sinceIso = new Date(Date.now() - 7 * 3600_000).toISOString();
+    } else if (periodRaw === "24h") {
+      hours = 24;
+      sinceIso = new Date(Date.now() - 24 * 3600_000).toISOString();
+    } else if (periodRaw === "all") {
+      sinceIso = null;
+    } else {
+      hours = Math.max(1, Math.min(7 * 24, Number(url.searchParams.get("hours") ?? "24") || 24));
+      sinceIso = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    }
     const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") ?? "200") || 200));
 
     if (source && (!/^[a-zA-Z0-9_:.-]+$/.test(source) || source.length > 80)) {
@@ -41,13 +58,12 @@ export const GET = withRateLimit(
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
     let q = supabase
       .from("service_logs")
       .select("id, source, level, message, context, occurred_at")
-      .gte("occurred_at", since)
       .order("occurred_at", { ascending: false })
       .limit(limit);
+    if (sinceIso !== null) q = q.gte("occurred_at", sinceIso);
     if (source) q = q.eq("source", source);
     if (level !== "all") q = q.eq("level", level);
 
@@ -57,11 +73,12 @@ export const GET = withRateLimit(
     }
 
     // sources 一覧 (UI 用)
-    const { data: sourcesData } = await supabase
+    let sourcesQ = supabase
       .from("service_logs")
       .select("source")
-      .gte("occurred_at", since)
       .limit(10_000);
+    if (sinceIso !== null) sourcesQ = sourcesQ.gte("occurred_at", sinceIso);
+    const { data: sourcesData } = await sourcesQ;
     const sources = Array.from(
       new Set(((sourcesData as Array<{ source: string }> | null) ?? []).map((r) => r.source)),
     ).sort();

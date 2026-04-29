@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { TabDescription } from "./TabDescription";
+import { TimeRangeSelector, type TimeRange } from "./TimeRangeSelector";
 
 type EventType = "user_action" | "api_request" | "server_event";
 
@@ -32,7 +33,6 @@ type FetchState =
     }
   | { kind: "error"; message: string };
 
-type PeriodOption = "1h" | "24h" | "7d";
 type TypeFilter = "all" | EventType;
 
 function formatRelative(iso: string): string {
@@ -211,14 +211,14 @@ function describeEvent(row: ActivityRow): string | null {
 
 export function ActivityClient() {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
-  const [period, setPeriod] = useState<PeriodOption>("24h");
+  const [period, setPeriod] = useState<TimeRange>("24h");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [userFilter, setUserFilter] = useState<string>("");
 
   const fetchData = useCallback(async () => {
     setState({ kind: "loading" });
     try {
-      const params = new URLSearchParams({ statsPeriod: period, limit: "200" });
+      const params = new URLSearchParams({ period, limit: "200" });
       if (typeFilter !== "all") params.set("event_type", typeFilter);
       if (userFilter) params.set("user_id", userFilter);
       const res = await fetch(`/api/admin/activity?${params.toString()}`, {
@@ -272,22 +272,7 @@ export function ActivityClient() {
 
       {/* フィルタバー */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5 text-xs">
-          {(["1h", "24h", "7d"] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setPeriod(opt)}
-              className={`rounded px-2 py-1 transition ${
-                period === opt
-                  ? "bg-slate-700 text-slate-100"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
+        <TimeRangeSelector value={period} onChange={setPeriod} />
         <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5 text-xs">
           {(["all", "user_action", "api_request", "server_event"] as const).map((opt) => (
             <button

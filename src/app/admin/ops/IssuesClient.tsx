@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { TabDescription } from "./TabDescription";
+import {
+  TimeRangeSelector,
+  toSentryStatsPeriod,
+  type TimeRange,
+} from "./TimeRangeSelector";
 
 export type SentryServiceKey = "boundary" | "rezona";
 
@@ -122,11 +127,16 @@ export function IssuesClient({ service }: { service: SentryServiceKey }) {
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [category, setCategory] = useState<CategoryFilter>("all");
+  const [period, setPeriod] = useState<TimeRange>("24h");
 
   const fetchList = useCallback(async () => {
     setListState({ kind: "loading" });
     try {
-      const params = new URLSearchParams({ service, category });
+      const params = new URLSearchParams({
+        service,
+        category,
+        statsPeriod: toSentryStatsPeriod(period),
+      });
       const res = await fetch(`/api/admin/sentry/issues?${params.toString()}`, {
         cache: "no-store",
       });
@@ -144,7 +154,7 @@ export function IssuesClient({ service }: { service: SentryServiceKey }) {
     } catch (err) {
       setListState({ kind: "error", message: err instanceof Error ? err.message : "unknown error" });
     }
-  }, [service, category]);
+  }, [service, category, period]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -232,15 +242,16 @@ export function IssuesClient({ service }: { service: SentryServiceKey }) {
   return (
     <div className="space-y-4">
       <TabDescription>
-        本番に出ている <strong className="text-slate-200">未解決の Issue（直近 24h）</strong> を一覧表示します。
+        本番に出ている <strong className="text-slate-200">指定期間内の未解決 Issue</strong> を一覧表示します。
         サーバー例外、`pino` の error/fatal、Sentry が自動検知した
-        Performance Issue（N+1 / slow query 等）も含まれます。行をクリックすると右側に詳細とイベント情報を表示。
+        Performance Issue（N+1 / slow query 等）も含まれます。期間切替可。行をクリックすると右側に詳細とイベント情報を表示。
       </TabDescription>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
-          <h2 className="font-medium">未解決 Issues (直近 24h)</h2>
+          <h2 className="font-medium">未解決 Issues</h2>
           <div className="flex items-center gap-2">
+            <TimeRangeSelector value={period} onChange={setPeriod} />
             <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5 text-xs">
               {(["all", "error", "performance"] as const).map((opt) => (
                 <button

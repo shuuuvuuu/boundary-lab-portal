@@ -30,6 +30,12 @@ function parseService(url: URL): SentryService | null {
   return null;
 }
 
+function parseStatsPeriod(url: URL): string {
+  const raw = url.searchParams.get("statsPeriod") ?? "";
+  if (/^\d{1,4}[mhd]$/.test(raw)) return raw;
+  return "24h";
+}
+
 function projectTagFor(service: SentryService, projectSlug: string, index: number): string {
   if (service === "boundary") {
     return index === 0 ? "server" : "web";
@@ -45,6 +51,7 @@ export const GET = withRateLimit(
     const url = new URL(request.url);
     const level = parseLevel(url);
     const service = parseService(url);
+    const statsPeriod = parseStatsPeriod(url);
     if (service === null) {
       return NextResponse.json(
         { error: "invalid service (must be 'boundary' or 'rezona')" },
@@ -65,7 +72,7 @@ export const GET = withRateLimit(
     try {
       const results = await Promise.all(
         config.projects.map((slug) =>
-          listEvents(slug, { level, service }).catch((err: Error) => {
+          listEvents(slug, { level, service, statsPeriod }).catch((err: Error) => {
             console.error(`[sentry] ${service}/${slug} events failed:`, err.message);
             return [] as SentryLogEvent[];
           }),
