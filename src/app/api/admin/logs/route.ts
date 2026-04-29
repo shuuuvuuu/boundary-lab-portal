@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { withOwnerOrGuest } from "@/lib/auth/with-auth";
+import { withAuth, withOwnerOrGuest } from "@/lib/auth/with-auth";
+import { isOwnerEmail } from "@/lib/auth/owner-email";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 
 /**
@@ -71,5 +72,73 @@ export const GET = withRateLimit(
       hours,
       level,
     });
+  }),
+);
+
+// DELETE /api/admin/logs?before=<ISO 8601>   期間以前を削除
+// DELETE /api/admin/logs?all=true            全削除
+type DeleteResponse = {
+  deleted: number; // 削除件数
+};
+
+export const DELETE = withRateLimit(
+  { max: 5, windowMs: 60_000, scope: "admin-service-logs-delete" },
+  withAuth(async (request, ctx) => {
+    if (!isOwnerEmail(ctx.user.email)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+
+    const url = new URL(request.url);
+    const before = url.searchParams.get("before");
+    const all = url.searchParams.get("all") === "true";
+
+    if (before && all) {
+      return NextResponse.json(
+        { error: "specify either 'before' or 'all=true', not both" },
+        { status: 400 },
+      );
+    }
+    if (!before && !all) {
+      return NextResponse.json(
+        { error: "missing parameter: 'before' or 'all=true'" },
+        { status: 400 },
+      );
+    }
+    if (before) {
+      const t = Date.parse(before);
+      if (Number.isNaN(t)) {
+        return NextResponse.json(
+          { error: "invalid 'before' (must be ISO 8601)" },
+          { status: 400 },
+        );
+      }
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !key) {
+      return NextResponse.json(
+        { error: "supabase service role not configured" },
+        { status: 500 },
+      );
+    }
+    const supabase = createClient(supabaseUrl, key, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    let q = supabase.from("service_logs").delete({ count: "exact" });
+    if (before) {
+      q = q.lt("occurred_at", before);
+    } else {
+      q = q.neq("id", "00000000-0000-0000-0000-000000000000");
+    }
+
+    const { error, count } = await q;
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const response: DeleteResponse = { deleted: count ?? 0 };
+    return NextResponse.json(response);
   }),
 );
