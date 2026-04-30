@@ -6,6 +6,7 @@ import { OpsTabs } from "./OpsTabs";
 export const dynamic = "force-dynamic";
 
 export default function AdminOpsPage() {
+  const showSentryTabs = process.env.SENTRY_TABS_VISIBLE !== "false";
   const targets = parseTargets(process.env.HEALTH_CHECK_TARGETS);
   const httpServices = targets.map((t) => t.service);
   // cert:<host> 形式のサービスも同じ Uptime タブで選択できるようにする
@@ -17,15 +18,16 @@ export default function AdminOpsPage() {
   const defaultService =
     httpServices.includes("boundary")
       ? "boundary"
-      : httpServices[0] ?? certServices[0] ?? "boundary";
+      : httpServices[0] ?? certServices[0] ?? "rezona";
 
   // rezona の Sentry env が設定されている時のみ Service セレクタを表示する。
-  // 未設定時はセレクタ自体を隠し、UI をスッキリ見せる（boundary 単一表示）。
-  const rezonaSentryConfigured = isServiceConfigured("rezona");
+  // 未設定時はセレクタ自体を隠し、UI をスッキリ見せる。
+  const rezonaSentryConfigured = showSentryTabs && isServiceConfigured("rezona");
   return (
     <OpsTabs
       healthServices={services}
       defaultHealthService={defaultService}
+      showSentryTabs={showSentryTabs}
       showSentryServiceSelector={rezonaSentryConfigured}
     />
   );

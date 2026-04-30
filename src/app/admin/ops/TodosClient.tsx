@@ -124,8 +124,11 @@ export function TodosClient() {
   return (
     <div className="space-y-4">
       <TabDescription>
-        運用 TODO を管理するシンプルなタブ。期限を入れておくと、毎日 UTC 23:00 に
-        <code>todo-notify</code> ジョブが期限間近・期限切れを Discord 通知します。
+        運用 TODO の追加・期限管理を行うシンプルなタブです。期限を設定すると、
+        毎日 UTC 23:00 に
+        <code className="mx-1 rounded bg-slate-800 px-1">todo-notify</code>
+        ジョブが「期限切れ」「期限まで 7 日以内」を集計して Discord に投げます。
+        優先度 (0 / 1 / 2) で色分け、完了したら「done」に切り替えてアーカイブできます。
       </TabDescription>
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">

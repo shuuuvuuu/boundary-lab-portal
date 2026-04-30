@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { SentryServiceKey } from "./IssuesClient";
 import { TabDescription } from "./TabDescription";
+
+type UsersServiceKey = "rezona";
 
 type LiveKitConn = {
   room: string;
@@ -147,7 +148,7 @@ export function UsersClient() {
   const [activityState, setActivityState] = useState<FetchActivityState>({ kind: "idle" });
   const [selected, setSelected] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [service, setService] = useState<SentryServiceKey>("boundary");
+  const [service] = useState<UsersServiceKey>("rezona");
 
   const fetchUsers = useCallback(async () => {
     setUsersState((prev) => (prev.kind === "ready" ? prev : { kind: "loading" }));
@@ -257,46 +258,16 @@ export function UsersClient() {
   return (
     <div className="space-y-4">
       <TabDescription>
-        現在 <strong className="text-slate-200">socket.io / LiveKit に接続中の全ユーザー</strong>
-        を表示します。各ユーザーについて、socket transport (websocket / polling)、所属 world、
-        <strong className="text-slate-200">アバター位置同期 (position event) の活動状況</strong>、
-        LiveKit voice publisher 状態、直近 24h の Activity 履歴を確認できます。
-        sync ラベルが <code className="rounded bg-slate-800 px-1 text-amber-300">never</code>
-        や <code className="rounded bg-slate-800 px-1 text-red-300">silent</code> のユーザーは
-        socket alive でも実質的に同期していない疑い。各レコードに
-        <code className="mx-1 rounded bg-slate-800 px-1">server_id</code>
-        を付与しているため、将来複数サーバー化した時に「どのサーバー所属か」も判別可能。
-        {usersState.kind === "ready" && (
-          <>
-            現在は単一サーバー
-            <code className="mx-1 rounded bg-slate-800 px-1">{usersState.resp.server_id}</code>
-            運用中。
-          </>
-        )}
+        現在 socket.io / LiveKit に接続中の全ユーザーを 5 秒間隔で表示します。
+        各ユーザーについて、接続経路 (websocket / polling)、所属ワールド、
+        アバター位置同期の活動状況、LiveKit voice 参加状態、直近 24 時間の Activity
+        を確認できます。「sync silent」(2 分以上アバター位置情報が来ない) のラベルが付いた
+        ユーザーは、socket は生きているのに実質的に同期していない疑い =
+        サイレント切断の早期検知用です。
       </TabDescription>
 
       {/* 制御バー */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span>service:</span>
-        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
-          {(["boundary", "rezona"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => {
-                setService(s);
-                setSelected(null);
-              }}
-              className={`rounded px-2 py-1 transition ${
-                service === s
-                  ? "bg-slate-700 text-slate-100"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
         <label className="flex items-center gap-1">
           <input
             type="checkbox"
@@ -453,7 +424,7 @@ export function UsersClient() {
                   return (
                     <div>
                       <h4 className="mb-1 text-xs font-medium text-slate-300">
-                        アバター位置同期 (socket.io 'position' event)
+                        アバター位置同期 (socket.io &apos;position&apos; event)
                       </h4>
                       <div
                         className={`rounded border px-3 py-2 text-xs ${cls.className}`}

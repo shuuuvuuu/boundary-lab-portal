@@ -262,12 +262,13 @@ export function ActivityClient() {
   return (
     <div className="space-y-4">
       <TabDescription>
-        <strong className="text-slate-200">ユーザー操作・API 呼出・サーバー状態遷移</strong>
-        を時系列で 1 画面に統合したログです。30 日分を Supabase `activity_events` に保持。
-        各行に意味の説明とSentry へのリンクを付加。
-        攻撃スキャン疑い（<code className="mx-1 rounded bg-slate-800 px-1">.env</code>
-        や <code className="mx-1 rounded bg-slate-800 px-1">/wp-</code> 等の探索）は
-        赤線でハイライトします。
+        ユーザー操作・API 呼出・サーバー状態遷移を時系列で 1 画面に統合したログです。
+        30 日分を保持し、攻撃スキャンの兆候 (
+        <code className="rounded bg-slate-800 px-1">.env</code> や
+        <code className="mx-1 rounded bg-slate-800 px-1">/wp-</code>
+        等を狙ったリクエスト) は赤線でハイライトします。サーバー再起動
+        (server_boot / server_stop_graceful) もここに記録されるため、「いつ落ちたか」
+        「正常終了だったか」を時系列で追跡できます。
       </TabDescription>
 
       {/* フィルタバー */}
