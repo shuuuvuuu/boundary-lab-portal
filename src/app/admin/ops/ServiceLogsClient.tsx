@@ -110,8 +110,14 @@ export function ServiceLogsClient() {
   return (
     <div className="space-y-4">
       <TabDescription>
-        外部サービス (rezona など) から <code>/api/logs/ingest</code> 経由で受信した pino ログを表示します。
-        Sentry 経由の Logs タブとは別系統で、portal の <code>service_logs</code> テーブルが直接受け皿です。
+        外部サービス (現在は rezona-server / rezona-admin) から受信した warn 以上の
+        構造化ログを表示します。送信側は pino を
+        <code className="mx-1 rounded bg-slate-800 px-1">/api/logs/ingest</code>
+        に POST、portal の
+        <code className="mx-1 rounded bg-slate-800 px-1">service_logs</code>
+        テーブルに 30 日保持。Sentry 経由ではなく portal 自身が直接受け皿になる経路で、
+        source / level / 自由文字列で絞り込み可能です。古いログは「24 時間以前を削除」
+        「7 日以前を削除」「全削除」のメニューから一括掃除できます。
       </TabDescription>
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">

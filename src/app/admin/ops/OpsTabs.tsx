@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityClient } from "./ActivityClient";
 import { IssuesClient, type SentryServiceKey } from "./IssuesClient";
 import { JobsClient } from "./JobsClient";
@@ -26,37 +26,49 @@ type TabKey =
   | "jobs"
   | "todos";
 
-const TABS: Array<{ key: TabKey; label: string }> = [
+const SENTRY_TABS: Array<{ key: TabKey; label: string }> = [
   { key: "issues", label: "未解決 Issues" },
   { key: "logs", label: "Logs (Sentry)" },
-  { key: "service-logs", label: "Logs (受信)" },
   { key: "traces", label: "Traces" },
   { key: "web-vitals", label: "Web Vitals" },
+];
+
+const CORE_TABS: Array<{ key: TabKey; label: string }> = [
   { key: "activity", label: "Activity" },
   { key: "metrics", label: "Metrics" },
   { key: "users", label: "Users" },
   { key: "uptime", label: "Uptime" },
   { key: "jobs", label: "Jobs" },
+  { key: "service-logs", label: "Logs (受信)" },
   { key: "todos", label: "TODOs" },
 ];
 
-const SENTRY_SERVICES: SentryServiceKey[] = ["boundary", "rezona"];
+function buildTabs(showSentryTabs: boolean): Array<{ key: TabKey; label: string }> {
+  return showSentryTabs ? [...SENTRY_TABS, ...CORE_TABS] : CORE_TABS;
+}
 
-function readInitialTab(): TabKey {
-  if (typeof window === "undefined") return "issues";
+const SENTRY_SERVICES: SentryServiceKey[] = ["rezona"];
+
+function isSentryTab(tab: TabKey): boolean {
+  return tab === "issues" || tab === "logs" || tab === "traces" || tab === "web-vitals";
+}
+
+function readInitialTab(showSentryTabs: boolean): TabKey {
+  if (typeof window === "undefined") return "activity";
   const url = new URL(window.location.href);
   const raw = url.searchParams.get("tab");
-  if (raw === "logs") return "logs";
+  if (raw === "issues") return showSentryTabs ? "issues" : "activity";
+  if (raw === "logs") return showSentryTabs ? "logs" : "activity";
   if (raw === "service-logs") return "service-logs";
-  if (raw === "traces") return "traces";
-  if (raw === "web-vitals") return "web-vitals";
+  if (raw === "traces") return showSentryTabs ? "traces" : "activity";
+  if (raw === "web-vitals") return showSentryTabs ? "web-vitals" : "activity";
   if (raw === "activity") return "activity";
   if (raw === "metrics") return "metrics";
   if (raw === "users") return "users";
   if (raw === "uptime") return "uptime";
   if (raw === "jobs") return "jobs";
   if (raw === "todos") return "todos";
-  return "issues";
+  return "activity";
 }
 
 function readInitialService(fallback: SentryServiceKey): SentryServiceKey {
@@ -64,53 +76,55 @@ function readInitialService(fallback: SentryServiceKey): SentryServiceKey {
   const url = new URL(window.location.href);
   const raw = url.searchParams.get("service");
   if (raw === "rezona") return "rezona";
-  if (raw === "boundary") return "boundary";
   return fallback;
 }
 
 function writeQueryToUrl(tab: TabKey, service: SentryServiceKey): void {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
-  if (tab === "issues") {
+  if (tab === "activity") {
     url.searchParams.delete("tab");
   } else {
     url.searchParams.set("tab", tab);
   }
-  if (service === "boundary") {
-    url.searchParams.delete("service");
-  } else {
+  if (isSentryTab(tab) && service !== "rezona") {
     url.searchParams.set("service", service);
+  } else {
+    url.searchParams.delete("service");
   }
   window.history.replaceState(null, "", url.toString());
 }
 
+type OpsTabsProps = {
+  healthServices: string[];
+  defaultHealthService: string;
+  showSentryTabs: boolean;
+  /**
+   * Sentry の `service` セレクタを表示するか。
+   * rezona 用の env が未設定の時は false にする。
+   */
+  showSentryServiceSelector: boolean;
+};
+
 export function OpsTabs({
   healthServices,
   defaultHealthService,
+  showSentryTabs,
   showSentryServiceSelector,
-}: {
-  healthServices: string[];
-  defaultHealthService: string;
-  /**
-   * Sentry の `service` セレクタ（boundary / rezona）を表示するか。
-   * rezona 用の env が未設定の時は false にして boundary 単一運用にする。
-   */
-  showSentryServiceSelector: boolean;
-}) {
-  const [active, setActive] = useState<TabKey>("issues");
-  const [service, setService] = useState<SentryServiceKey>("boundary");
+}: OpsTabsProps) {
+  const tabs = useMemo(() => buildTabs(showSentryTabs), [showSentryTabs]);
+  const [active, setActive] = useState<TabKey>("activity");
+  const [service, setService] = useState<SentryServiceKey>("rezona");
 
   // hydration 後に URL から初期値を反映（SSR 差を避ける）
   useEffect(() => {
-    setActive(readInitialTab());
-    // rezona env が無効化されている時は URL ?service=rezona が指定されても
-    // boundary に丸める（UI 混乱回避）。
+    setActive(readInitialTab(showSentryTabs));
     if (showSentryServiceSelector) {
-      setService(readInitialService("boundary"));
+      setService(readInitialService("rezona"));
     } else {
-      setService("boundary");
+      setService("rezona");
     }
-  }, [showSentryServiceSelector]);
+  }, [showSentryTabs, showSentryServiceSelector]);
 
   useEffect(() => {
     writeQueryToUrl(active, service);
@@ -128,7 +142,7 @@ export function OpsTabs({
     <div className="space-y-4">
       <nav className="flex flex-wrap items-center gap-3 border-b border-slate-800">
         <div className="flex gap-1">
-          {TABS.map((tab) => {
+          {tabs.map((tab) => {
             const isActive = tab.key === active;
             return (
               <button
@@ -147,15 +161,9 @@ export function OpsTabs({
           })}
         </div>
 
-        {/* Uptime / Activity / Metrics タブは内部で service 選択を持つため、Sentry 用セレクタは非表示。
-            rezona 用 env が無い場合は boundary 単一運用なのでセレクタ自体を出さない。 */}
-        {active !== "uptime" &&
-          active !== "activity" &&
-          active !== "metrics" &&
-          active !== "users" &&
-          active !== "jobs" &&
-          active !== "todos" &&
-          active !== "service-logs" &&
+        {/* Sentry タブ以外では service 選択は不要。rezona 用 env が無い場合も非表示。 */}
+        {showSentryTabs &&
+          isSentryTab(active) &&
           showSentryServiceSelector && (
           <div className="ml-auto flex items-center gap-2 pb-1 text-xs text-slate-400">
             <span>Sentry Service</span>
@@ -179,11 +187,11 @@ export function OpsTabs({
         )}
       </nav>
 
-      {active === "issues" && <IssuesClient service={service} />}
-      {active === "logs" && <LogsClient service={service} />}
+      {showSentryTabs && active === "issues" && <IssuesClient service={service} />}
+      {showSentryTabs && active === "logs" && <LogsClient service={service} />}
       {active === "service-logs" && <ServiceLogsClient />}
-      {active === "traces" && <TracesClient service={service} />}
-      {active === "web-vitals" && <WebVitalsClient service={service} />}
+      {showSentryTabs && active === "traces" && <TracesClient service={service} />}
+      {showSentryTabs && active === "web-vitals" && <WebVitalsClient service={service} />}
       {active === "activity" && <ActivityClient />}
       {active === "metrics" && <MetricsClient />}
       {active === "users" && <UsersClient />}

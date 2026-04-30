@@ -11,8 +11,9 @@ import {
   YAxis,
 } from "recharts";
 
-import type { SentryServiceKey } from "./IssuesClient";
 import { TabDescription } from "./TabDescription";
+
+type MetricsServiceKey = "rezona";
 
 type ResourceSample = {
   ts: number;
@@ -124,7 +125,7 @@ function lagColorClass(p99: number): string {
 export function MetricsClient() {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [refresh, setRefresh] = useState<RefreshOption>("5s");
-  const [service, setService] = useState<SentryServiceKey>("boundary");
+  const [service] = useState<MetricsServiceKey>("rezona");
 
   const fetchAll = async (): Promise<void> => {
     setState((prev) => (prev.kind === "ready" ? prev : { kind: "loading" }));
@@ -214,35 +215,22 @@ export function MetricsClient() {
   return (
     <div className="space-y-4">
       <TabDescription>
-        {`${service}-server`} プロセスの<strong className="text-slate-200">
-          メモリ・CPU・event loop lag
-        </strong>
-        を 1 秒間隔・直近 60 秒で表示します。{" "}
-        <strong className="text-slate-200">ルーム別の socket / LiveKit 参加者数</strong>
-        も同時表示。OOM 前兆 (memory じわ漏れ) や socket.io 詰まり (event loop lag spike) を
-        異常 boot 前に検知することが目的です。データ保持窓は server 側 60 秒固定で、
-        更新間隔は表示の頻度のみ変更します（5s / 60s / 1h / 24h / off）。
+        rezona-server プロセスの健全性を可視化します。
+        <br />
+        上段「Droplet host」: マシン全体のメモリ・CPU・ディスク・ネットワーク (Docker
+        container 全部の合算)
+        <br />
+        中段「rezona-server プロセス単独」: Node.js プロセスの RSS メモリ
+        (実メモリ消費量)・CPU・event loop lag (1 秒単位の処理遅延)
+        <br />
+        下段「Rooms」: ルーム別の socket 接続数と LiveKit 参加者数
+        <br />
+        データは 1 秒間隔で取得した直近 60 秒分のグラフです。OOM (メモリ枯渇)
+        の前兆や socket.io の処理詰まりを、サービスが落ちる前に検知することが目的です。
       </TabDescription>
 
       {/* 制御バー */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span>service:</span>
-        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
-          {(["boundary", "rezona"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setService(s)}
-              className={`rounded px-2 py-1 transition ${
-                service === s
-                  ? "bg-slate-700 text-slate-100"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
         <span>更新間隔:</span>
         <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
           {(["5s", "60s", "1h", "24h", "off"] as const).map((opt) => (
@@ -264,7 +252,7 @@ export function MetricsClient() {
                       ? "1 分置き。タブを開きっぱなしにしておく時"
                       : opt === "1h"
                         ? "1 時間置き。常時開きっぱなし時の負荷削減"
-                        : "24 時間置き。事実上手動相当（boundary-server のメモリ保持窓は 60 秒固定）"
+                        : "24 時間置き。事実上手動相当（server 側のメモリ保持窓は 60 秒固定）"
               }
             >
               {opt}
@@ -300,8 +288,8 @@ export function MetricsClient() {
               Droplet host (全コンテナ合算)
             </h3>
             <p className="mt-0.5 text-[11px] text-slate-500">
-              boundary-server / portal / livekit / caddy / app / etc. 全部の合算。
-              {`${service}-server`} プロセス単独の値は下のセクションで確認。
+              rezona-server / portal / livekit / caddy / app / etc. 全部の合算。
+              rezona-server プロセス単独の値は下のセクションで確認。
             </p>
           </header>
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -405,11 +393,11 @@ export function MetricsClient() {
         </section>
       )}
 
-      {/* {`${service}-server`} プロセス単独 */}
+      {/* rezona-server プロセス単独 */}
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <header className="border-b border-slate-800 px-4 py-2">
           <h3 className="text-sm font-medium text-slate-200">
-            {`${service}-server`} プロセス単独
+            rezona-server プロセス単独
           </h3>
           <p className="mt-0.5 text-[11px] text-slate-500">
             host 全体ではなく、Node.js プロセスの内訳。直近 60 秒の時系列付き。

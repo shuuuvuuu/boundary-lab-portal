@@ -173,9 +173,13 @@ export function UptimeClient({
   return (
     <section className="space-y-4">
       <TabDescription>
-        <strong className="text-slate-200">本番ドメインの health チェックと TLS 証明書残日数</strong>
-        を 60 秒間隔（health）/ 24 時間間隔（cert）で自動監視・履歴表示します。
-        連続 N 回失敗で Discord に通知します（実装済、本番アラート発火確認は未実施）。
+        本番ドメインへの health check (60 秒間隔) と、TLS 証明書の残日数
+        (24 時間間隔) を自動監視します。連続 N 回失敗 (現状 3〜5 回) で
+        Discord に DOWN 通知、復旧時に RECOVERED 通知を出します。証明書は残 30 日で
+        警告色、残 7 日で危険色に変わります。監視対象は環境変数
+        <code className="mx-1 rounded bg-slate-800 px-1">HEALTH_CHECK_TARGETS</code> /
+        <code className="mx-1 rounded bg-slate-800 px-1">CERT_CHECK_TARGETS</code>
+        で管理されます。
       </TabDescription>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-xs text-slate-400">
