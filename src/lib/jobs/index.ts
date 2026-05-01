@@ -7,6 +7,8 @@ import { airdropDryRunJob } from "./airdrop-dry-run";
 import { todoNotifyJob } from "./todo-notify";
 import { backupSupabaseJob } from "./backup-supabase";
 import { backupSentryJob } from "./backup-sentry";
+import { metricsPollerJob } from "./metrics-poller";
+import { metricsRetentionJob } from "./metrics-retention";
 
 /**
  * Phase A3: ジョブ定義の集約。
@@ -34,6 +36,10 @@ export const JOBS: Job[] = [
   backupSupabaseJob,
   // 毎週日曜 UTC 19:00 (JST 月曜 04:00): Sentry issue / event count export
   backupSentryJob,
+  // 60 秒間隔: rezona / boundary metrics を polling し時系列保存
+  metricsPollerJob,
+  // 毎日 UTC 03:45: 古い service_metrics を削除
+  metricsRetentionJob,
 ];
 
 export {
@@ -45,4 +51,6 @@ export {
   todoNotifyJob,
   backupSupabaseJob,
   backupSentryJob,
+  metricsPollerJob,
+  metricsRetentionJob,
 };
