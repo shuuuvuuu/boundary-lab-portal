@@ -88,21 +88,23 @@ function extractServerId(payload: JsonObject): string | null {
   return typeof serverId === "string" && serverId.length > 0 ? serverId : null;
 }
 
-function extractNestedMetric(payload: JsonObject, key: "rooms" | "users"): JsonObject | null {
-  const data = asRecord(payload.data);
-  return asRecord(data?.[key]) ?? asRecord(payload[key]);
+function extractNestedMetric(payload: JsonObject): JsonObject | null {
+  // rezona /api/admin/metrics?type=rooms|users は data 直下に配列 (rooms[] / users[]) を持つ。
+  // data オブジェクト全体を保存（total_online / livekit_reachable / users[] 等を含む）。
+  return asRecord(payload.data);
 }
 
 function normalizeServerMetric(payload: JsonObject): JsonObject | null {
+  // rezona /api/admin/metrics?type=server は data 直下に { windowSamples, intervalMs, samples[] } を返す。
+  // 旧実装は data.server というネストを期待していたが実体は data 直下。
   const data = asRecord(payload.data);
-  const server = asRecord(data?.server) ?? asRecord(payload.server);
-  if (!server) return null;
+  if (!data) return null;
 
-  const normalized: JsonObject = { ...server };
-  const samples = Array.isArray(server.samples) ? server.samples : [];
+  const normalized: JsonObject = { ...data };
+  const samples = Array.isArray(data.samples) ? data.samples : [];
   const latestSample = samples.length > 0 ? samples[samples.length - 1] : undefined;
 
-  if (Array.isArray(server.samples)) {
+  if (Array.isArray(data.samples)) {
     normalized.samples = latestSample === undefined ? [] : [latestSample];
   }
   if ((normalized.current === undefined || normalized.current === null) && latestSample !== undefined) {
@@ -114,7 +116,7 @@ function normalizeServerMetric(payload: JsonObject): JsonObject | null {
 
 function normalizeMetricPayload(type: MetricType, payload: JsonObject): JsonObject | null {
   if (type === "server") return normalizeServerMetric(payload);
-  return extractNestedMetric(payload, type);
+  return extractNestedMetric(payload);
 }
 
 async function fetchMetricRow(
