@@ -20,6 +20,8 @@ type ActivityRow = {
 
 type Summary = { user_id: string; count: number };
 type ApiSummary = { action: string; count: number };
+type ErrorRateRoute = { route: string; total: number; error5xx: number; rate: number };
+type ErrorRatePeriod = "1h" | "24h" | "7d" | "30d";
 
 type FetchState =
   | { kind: "idle" }
@@ -30,6 +32,18 @@ type FetchState =
       statsPeriod: string;
       topUsers: Summary[];
       topApis: ApiSummary[];
+    }
+  | { kind: "error"; message: string };
+
+type ErrorRateFetchState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | {
+      kind: "ready";
+      period: ErrorRatePeriod;
+      totalRequests: number;
+      total5xx: number;
+      routes: ErrorRateRoute[];
     }
   | { kind: "error"; message: string };
 
@@ -83,6 +97,12 @@ function statusClass(status: number | undefined): string {
   if (status >= 400) return "text-amber-300";
   if (status >= 200 && status < 300) return "text-slate-300";
   return "text-slate-400";
+}
+
+function toErrorRatePeriod(range: TimeRange): ErrorRatePeriod {
+  if (range === "1h") return "1h";
+  if (range === "all") return "30d";
+  return "24h";
 }
 
 function metadataSummary(row: ActivityRow): string | null {
@@ -211,6 +231,9 @@ function describeEvent(row: ActivityRow): string | null {
 
 export function ActivityClient() {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
+  const [errorRateState, setErrorRateState] = useState<ErrorRateFetchState>({
+    kind: "idle",
+  });
   const [period, setPeriod] = useState<TimeRange>("24h");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [userFilter, setUserFilter] = useState<string>("");
@@ -246,9 +269,43 @@ export function ActivityClient() {
     }
   }, [period, typeFilter, userFilter]);
 
+  const fetchErrorRateData = useCallback(async () => {
+    setErrorRateState({ kind: "loading" });
+    try {
+      const errorRatePeriod = toErrorRatePeriod(period);
+      const params = new URLSearchParams({ period: errorRatePeriod });
+      const res = await fetch(`/api/admin/activity/error-rate?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as {
+        period: ErrorRatePeriod;
+        total_requests: number;
+        total_5xx: number;
+        routes: ErrorRateRoute[];
+      };
+      setErrorRateState({
+        kind: "ready",
+        period: json.period,
+        totalRequests: json.total_requests,
+        total5xx: json.total_5xx,
+        routes: json.routes,
+      });
+    } catch (err) {
+      setErrorRateState({
+        kind: "error",
+        message: err instanceof Error ? err.message : "unknown error",
+      });
+    }
+  }, [period]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    fetchErrorRateData();
+  }, [fetchErrorRateData]);
 
   const events = state.kind === "ready" ? state.events : [];
   const topUsers = state.kind === "ready" ? state.topUsers : [];
@@ -300,11 +357,16 @@ export function ActivityClient() {
         />
         <button
           type="button"
-          onClick={fetchData}
-          disabled={state.kind === "loading"}
+          onClick={() => {
+            fetchData();
+            fetchErrorRateData();
+          }}
+          disabled={state.kind === "loading" || errorRateState.kind === "loading"}
           className="ml-auto rounded border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {state.kind === "loading" ? "読み込み中..." : "再取得"}
+          {state.kind === "loading" || errorRateState.kind === "loading"
+            ? "読み込み中..."
+            : "再取得"}
         </button>
       </div>
 
@@ -473,6 +535,65 @@ export function ActivityClient() {
           </section>
         </div>
       </div>
+
+      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
+          <h3 className="text-sm font-medium">5xx rate per route</h3>
+          {errorRateState.kind === "ready" && (
+            <span className="text-xs tabular-nums text-slate-500">
+              {errorRateState.period} / {errorRateState.total5xx} 5xx /{" "}
+              {errorRateState.totalRequests} requests
+            </span>
+          )}
+        </header>
+        {errorRateState.kind === "loading" && (
+          <p className="px-4 py-6 text-sm text-slate-400">読み込み中...</p>
+        )}
+        {errorRateState.kind === "error" && (
+          <p className="px-4 py-6 text-sm text-red-300">
+            エラー: {errorRateState.message}
+          </p>
+        )}
+        {errorRateState.kind === "ready" && errorRateState.routes.length === 0 && (
+          <p className="px-4 py-6 text-sm text-slate-400">
+            期間内に 5xx 応答はありませんでした
+          </p>
+        )}
+        {errorRateState.kind === "ready" && errorRateState.routes.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead className="border-b border-slate-800 text-slate-500">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">route</th>
+                  <th className="px-4 py-2 text-right font-medium">total</th>
+                  <th className="px-4 py-2 text-right font-medium">5xx</th>
+                  <th className="px-4 py-2 text-right font-medium">rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {errorRateState.routes.map((route) => (
+                  <tr key={route.route}>
+                    <td className="max-w-[720px] px-4 py-2 font-mono text-slate-300">
+                      <span className="block truncate" title={route.route}>
+                        {route.route}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-slate-500">
+                      {route.total}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-red-300">
+                      {route.error5xx}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-slate-300">
+                      {(route.rate * 100).toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
