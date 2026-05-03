@@ -17,12 +17,11 @@ const CLOSED_MODE_BYPASS_PATHS = ["/coming-soon", "/login", "/api/healthz"];
 const CLOSED_MODE_BYPASS_PREFIXES = ["/auth/", "/blog", "/api/logs/", "/api/otel/"];
 
 // GUEST_OPS_ENABLED=true の時、ログイン不要で通す path/prefix。
-// 読み取り専用の運用ダッシュボード用（Issues / Logs / Uptime / Probe / Refresh）。
+// 読み取り専用の運用ダッシュボード用。
 const GUEST_OPS_BYPASS_PATHS = ["/admin/ops"];
 const GUEST_OPS_BYPASS_PREFIXES = [
   "/admin/ops/",
   "/api/admin/ops/",
-  "/api/admin/sentry/",
   "/api/admin/activity", // Phase 2.2: Activity タブ用
   "/api/admin/metrics/", // Phase 3: Metrics タブ用
   "/api/admin/jobs", // Phase A3: Jobs タブ (一覧/履歴は guest 可、run は内部で owner 判定)

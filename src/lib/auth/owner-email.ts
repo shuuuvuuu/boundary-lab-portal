@@ -12,8 +12,7 @@ export function isOwnerEmail(email: string | null | undefined): boolean {
  * GUEST_OPS_ENABLED=true の時のみ true を返す。
  * 明示的に文字列 "true" である場合のみ有効化する（デフォルト false）。
  *
- * 有効化すると /admin/ops（Issues / Logs / Uptime タブ）と
- * 関連 API (/api/admin/ops/**, /api/admin/sentry/**) が
+ * 有効化すると /admin/ops と関連する読み取り API が
  * 未ログイン含む誰でも read-only で閲覧可能になる。
  */
 export function isGuestOpsEnabled(): boolean {

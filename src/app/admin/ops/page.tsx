@@ -1,6 +1,5 @@
 import { parseTargets } from "@/lib/health-poller";
 import { parseCertTargets } from "@/lib/cert-checker";
-import { isServiceConfigured } from "@/lib/sentry/client";
 import { OpsTabs } from "./OpsTabs";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +18,6 @@ function firstSearchParam(value: string | string[] | undefined): string | null {
 export default async function AdminOpsPage({ searchParams }: AdminOpsPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const initialTab = firstSearchParam(resolvedSearchParams?.tab);
-  const showSentryTabs = process.env.SENTRY_TABS_VISIBLE !== "false";
   const targets = parseTargets(process.env.HEALTH_CHECK_TARGETS);
   const httpServices = targets.map((t) => t.service);
   // cert:<host> 形式のサービスも同じ Uptime タブで選択できるようにする
@@ -33,15 +31,10 @@ export default async function AdminOpsPage({ searchParams }: AdminOpsPageProps) 
       ? "boundary"
       : httpServices[0] ?? certServices[0] ?? "rezona";
 
-  // rezona の Sentry env が設定されている時のみ Service セレクタを表示する。
-  // 未設定時はセレクタ自体を隠し、UI をスッキリ見せる。
-  const rezonaSentryConfigured = showSentryTabs && isServiceConfigured("rezona");
   return (
     <OpsTabs
       healthServices={services}
       defaultHealthService={defaultService}
-      showSentryTabs={showSentryTabs}
-      showSentryServiceSelector={rezonaSentryConfigured}
       initialTab={initialTab}
     />
   );
