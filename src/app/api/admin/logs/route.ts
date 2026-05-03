@@ -8,7 +8,7 @@ import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
  * GET /api/admin/logs?source=rezona-server&level=warn&hours=24&limit=200
  *
  * service_logs から外部サービス pino ログを取得する。
- * 既存 Logs タブ (Sentry 経由) と並存する形で、portal が直接受信したログを表示する。
+ * portal が直接受信したログを表示する。
  */
 
 const ALLOWED_LEVELS = new Set(["all", "debug", "info", "warn", "error", "fatal"]);

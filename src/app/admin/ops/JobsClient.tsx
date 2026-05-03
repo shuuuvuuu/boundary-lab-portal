@@ -143,8 +143,8 @@ export function JobsClient() {
     <div className="space-y-4">
       <TabDescription>
         portal の定期実行ジョブ (scheduler) の稼働状況を表示します。
-        現在 8 種類: 日次 health 集計 / 週次レポート / 30 日 retention 削除 /
-        airdrop dry-run / TODO 期限通知 / Supabase バックアップ / Sentry バックアップなど。
+        主なジョブ: 日次 health 集計 / 週次レポート / 30 日 retention 削除 /
+        airdrop dry-run / TODO 期限通知 / Supabase バックアップ / metrics polling など。
         スケジュールはすべて UTC 表記、失敗時は Discord と email に通知されます。
         オーナーアカウントなら「今すぐ実行」ボタンで手動トリガーできます。
         ランナー本体は環境変数

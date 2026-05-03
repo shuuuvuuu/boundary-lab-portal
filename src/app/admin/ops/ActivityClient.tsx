@@ -15,7 +15,6 @@ type ActivityRow = {
   user_id: string | null;
   metadata: Record<string, unknown>;
   occurred_at: string;
-  sentry_link?: string | null;
 };
 
 type Summary = { user_id: string; count: number };
@@ -421,7 +420,6 @@ export function ActivityClient() {
             {events.map((e) => {
               const status = e.metadata?.status as number | undefined;
               const description = describeEvent(e);
-              const sentryLink = e.sentry_link ?? null;
               const path = (e.metadata?.path as string | undefined) ?? "";
               const suspicious =
                 e.event_type === "api_request" && isSuspiciousScan(path);
@@ -448,17 +446,6 @@ export function ActivityClient() {
                     )}
                     <span className="text-slate-500">{metadataSummary(e)}</span>
                     <span className="ml-auto flex items-center gap-2 text-slate-500">
-                      {sentryLink && (
-                        <a
-                          href={sentryLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sky-400 hover:underline"
-                          title="Sentry で開く（時刻 ±30 分の events / transaction を検索）"
-                        >
-                          Sentry ↗
-                        </a>
-                      )}
                       <span>{formatRelative(e.occurred_at)}</span>
                     </span>
                   </div>

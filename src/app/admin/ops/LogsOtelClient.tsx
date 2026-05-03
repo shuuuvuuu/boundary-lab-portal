@@ -233,8 +233,8 @@ export function LogsOtelClient() {
       <TabDescription>
         portal が受信した OTel logs を Supabase の
         <code className="mx-1 rounded bg-slate-800 px-1">otel_logs</code>
-        から表示します。既存の Sentry Logs は移行期間中そのまま残し、こちらでは
-        OTel の trace_id / span_id / resource attributes / log attributes を直接確認します。
+        から表示します。OTel の trace_id / span_id / resource attributes / log attributes
+        を直接確認します。
       </TabDescription>
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">

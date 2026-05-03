@@ -8,7 +8,7 @@
  *   - Droplet 側で `cron.d` や別コンテナを増やすと運用ポイントが増える
  *   - 既に poller / cert checker が同じ仕組みで稼働しており、整合性が取りやすい
  *   - JOBS は portal Next.js プロセス内で実行されるため、既存の Supabase /
- *     Sentry / Discord webhook クライアントをそのまま流用できる
+ *     Discord webhook クライアントをそのまま流用できる
  *
  * 将来的に horizontal scale したくなったら `JOB_RUNNER_ENABLED=false` で一斉停止し、
  * 別プロセスへ移すのが想定経路。

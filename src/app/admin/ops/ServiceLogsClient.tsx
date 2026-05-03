@@ -115,7 +115,7 @@ export function ServiceLogsClient() {
         <code className="mx-1 rounded bg-slate-800 px-1">/api/logs/ingest</code>
         に POST、portal の
         <code className="mx-1 rounded bg-slate-800 px-1">service_logs</code>
-        テーブルに 30 日保持。Sentry 経由ではなく portal 自身が直接受け皿になる経路で、
+        テーブルに 30 日保持。portal 自身が直接受け皿になる経路で、
         source / level / 自由文字列で絞り込み可能です。古いログは「24 時間以前を削除」
         「7 日以前を削除」「全削除」のメニューから一括掃除できます。
       </TabDescription>
