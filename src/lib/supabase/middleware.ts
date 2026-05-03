@@ -13,8 +13,8 @@ const PROTECTED_PREFIXES = [
 ];
 
 const CLOSED_MODE_BYPASS_PATHS = ["/coming-soon", "/login", "/api/healthz"];
-// /blog は誰でも閲覧可。/api/logs/ingest は外部サービスからの POST 受信用。
-const CLOSED_MODE_BYPASS_PREFIXES = ["/auth/", "/blog", "/api/logs/"];
+// /blog は誰でも閲覧可。/api/logs/ingest と /api/otel は外部サービスからの POST 受信用。
+const CLOSED_MODE_BYPASS_PREFIXES = ["/auth/", "/blog", "/api/logs/", "/api/otel/"];
 
 // GUEST_OPS_ENABLED=true の時、ログイン不要で通す path/prefix。
 // 読み取り専用の運用ダッシュボード用（Issues / Logs / Uptime / Probe / Refresh）。
