@@ -5,19 +5,25 @@ import { ActivityClient } from "./ActivityClient";
 import { IssuesClient, type SentryServiceKey } from "./IssuesClient";
 import { JobsClient } from "./JobsClient";
 import { LogsClient } from "./LogsClient";
+import { LogsOtelClient } from "./LogsOtelClient";
 import { MetricsClient } from "./MetricsClient";
 import { ServiceLogsClient } from "./ServiceLogsClient";
+import { SyncCheckClient } from "./SyncCheckClient";
 import { TodosClient } from "./TodosClient";
 import { TracesClient } from "./TracesClient";
+import { TracesOtelClient } from "./TracesOtelClient";
 import { UptimeClient } from "./UptimeClient";
 import { UsersClient } from "./UsersClient";
 import { WebVitalsClient } from "./WebVitalsClient";
 
 type TabKey =
   | "issues"
+  | "sync"
   | "logs"
+  | "logs-otel"
   | "service-logs"
   | "traces"
+  | "traces-otel"
   | "web-vitals"
   | "activity"
   | "metrics"
@@ -26,8 +32,17 @@ type TabKey =
   | "jobs"
   | "todos";
 
-const SENTRY_TABS: Array<{ key: TabKey; label: string }> = [
+const SENTRY_PRIMARY_TABS: Array<{ key: TabKey; label: string }> = [
   { key: "issues", label: "未解決 Issues" },
+];
+
+const OTEL_TABS: Array<{ key: TabKey; label: string }> = [
+  { key: "sync", label: "Sync" },
+  { key: "logs-otel", label: "Logs (OTel)" },
+  { key: "traces-otel", label: "Traces (OTel)" },
+];
+
+const SENTRY_SECONDARY_TABS: Array<{ key: TabKey; label: string }> = [
   { key: "logs", label: "Logs (Sentry)" },
   { key: "traces", label: "Traces" },
   { key: "web-vitals", label: "Web Vitals" },
@@ -44,7 +59,9 @@ const CORE_TABS: Array<{ key: TabKey; label: string }> = [
 ];
 
 function buildTabs(showSentryTabs: boolean): Array<{ key: TabKey; label: string }> {
-  return showSentryTabs ? [...SENTRY_TABS, ...CORE_TABS] : CORE_TABS;
+  return showSentryTabs
+    ? [...SENTRY_PRIMARY_TABS, ...OTEL_TABS, ...SENTRY_SECONDARY_TABS, ...CORE_TABS]
+    : [...OTEL_TABS, ...CORE_TABS];
 }
 
 const SENTRY_SERVICES: SentryServiceKey[] = ["rezona"];
@@ -53,14 +70,14 @@ function isSentryTab(tab: TabKey): boolean {
   return tab === "issues" || tab === "logs" || tab === "traces" || tab === "web-vitals";
 }
 
-function readInitialTab(showSentryTabs: boolean): TabKey {
-  if (typeof window === "undefined") return "activity";
-  const url = new URL(window.location.href);
-  const raw = url.searchParams.get("tab");
+function normalizeTab(raw: string | null | undefined, showSentryTabs: boolean): TabKey | null {
   if (raw === "issues") return showSentryTabs ? "issues" : "activity";
+  if (raw === "sync") return "sync";
   if (raw === "logs") return showSentryTabs ? "logs" : "activity";
+  if (raw === "logs-otel") return "logs-otel";
   if (raw === "service-logs") return "service-logs";
   if (raw === "traces") return showSentryTabs ? "traces" : "activity";
+  if (raw === "traces-otel") return "traces-otel";
   if (raw === "web-vitals") return showSentryTabs ? "web-vitals" : "activity";
   if (raw === "activity") return "activity";
   if (raw === "metrics") return "metrics";
@@ -68,6 +85,17 @@ function readInitialTab(showSentryTabs: boolean): TabKey {
   if (raw === "uptime") return "uptime";
   if (raw === "jobs") return "jobs";
   if (raw === "todos") return "todos";
+  return null;
+}
+
+function readInitialTab(showSentryTabs: boolean, fallbackRaw?: string | null): TabKey {
+  if (typeof window === "undefined") return normalizeTab(fallbackRaw, showSentryTabs) ?? "activity";
+  const url = new URL(window.location.href);
+  const raw = url.searchParams.get("tab");
+  const normalized = normalizeTab(raw, showSentryTabs);
+  if (normalized) return normalized;
+  const fallback = normalizeTab(fallbackRaw, showSentryTabs);
+  if (fallback) return fallback;
   return "activity";
 }
 
@@ -104,6 +132,7 @@ type OpsTabsProps = {
    * rezona 用の env が未設定の時は false にする。
    */
   showSentryServiceSelector: boolean;
+  initialTab?: string | null;
 };
 
 export function OpsTabs({
@@ -111,20 +140,21 @@ export function OpsTabs({
   defaultHealthService,
   showSentryTabs,
   showSentryServiceSelector,
+  initialTab,
 }: OpsTabsProps) {
   const tabs = useMemo(() => buildTabs(showSentryTabs), [showSentryTabs]);
-  const [active, setActive] = useState<TabKey>("activity");
+  const [active, setActive] = useState<TabKey>(() => readInitialTab(showSentryTabs, initialTab));
   const [service, setService] = useState<SentryServiceKey>("rezona");
 
   // hydration 後に URL から初期値を反映（SSR 差を避ける）
   useEffect(() => {
-    setActive(readInitialTab(showSentryTabs));
+    setActive(readInitialTab(showSentryTabs, initialTab));
     if (showSentryServiceSelector) {
       setService(readInitialService("rezona"));
     } else {
       setService("rezona");
     }
-  }, [showSentryTabs, showSentryServiceSelector]);
+  }, [initialTab, showSentryTabs, showSentryServiceSelector]);
 
   useEffect(() => {
     writeQueryToUrl(active, service);
@@ -188,9 +218,12 @@ export function OpsTabs({
       </nav>
 
       {showSentryTabs && active === "issues" && <IssuesClient service={service} />}
+      {active === "sync" && <SyncCheckClient />}
       {showSentryTabs && active === "logs" && <LogsClient service={service} />}
+      {active === "logs-otel" && <LogsOtelClient />}
       {active === "service-logs" && <ServiceLogsClient />}
       {showSentryTabs && active === "traces" && <TracesClient service={service} />}
+      {active === "traces-otel" && <TracesOtelClient />}
       {showSentryTabs && active === "web-vitals" && <WebVitalsClient service={service} />}
       {active === "activity" && <ActivityClient />}
       {active === "metrics" && <MetricsClient />}
