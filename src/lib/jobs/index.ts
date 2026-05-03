@@ -6,8 +6,6 @@ import { healthRetentionJob } from "./health-retention";
 import { airdropDryRunJob } from "./airdrop-dry-run";
 import { todoNotifyJob } from "./todo-notify";
 import { backupSupabaseJob } from "./backup-supabase";
-import { deployEventsRetentionJob } from "./deploy-events-retention";
-import { deployEventsSyncJob } from "./deploy-events-sync";
 import { metricsPollerJob } from "./metrics-poller";
 import { metricsRetentionJob } from "./metrics-retention";
 
@@ -29,8 +27,6 @@ export const JOBS: Job[] = [
   activityRetentionJob,
   // 毎日 UTC 03:30: 古い service_health_checks を削除
   healthRetentionJob,
-  // 5 分間隔: service_logs.context.server_id を deploy/restart イベントへ集約
-  deployEventsSyncJob,
   // 毎日 UTC 04:00: rezona airdrop dry-run (本番状態は触らず portal 側 read-only 確認)
   airdropDryRunJob,
   // 毎日 UTC 23:00 (JST 08:00): TODO 期限通知 (期限 7 日以内 + 期限切れ)
@@ -41,8 +37,6 @@ export const JOBS: Job[] = [
   metricsPollerJob,
   // 毎日 UTC 03:45: 古い service_metrics を削除
   metricsRetentionJob,
-  // 毎日 UTC 03:50: 古い deploy_events を削除
-  deployEventsRetentionJob,
 ];
 
 export {
@@ -50,8 +44,6 @@ export {
   weeklyReportJob,
   activityRetentionJob,
   healthRetentionJob,
-  deployEventsSyncJob,
-  deployEventsRetentionJob,
   airdropDryRunJob,
   todoNotifyJob,
   backupSupabaseJob,
