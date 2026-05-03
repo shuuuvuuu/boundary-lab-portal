@@ -6,6 +6,8 @@ import { healthRetentionJob } from "./health-retention";
 import { airdropDryRunJob } from "./airdrop-dry-run";
 import { todoNotifyJob } from "./todo-notify";
 import { backupSupabaseJob } from "./backup-supabase";
+import { deployEventsRetentionJob } from "./deploy-events-retention";
+import { deployEventsSyncJob } from "./deploy-events-sync";
 import { metricsPollerJob } from "./metrics-poller";
 import { metricsRetentionJob } from "./metrics-retention";
 
@@ -33,10 +35,14 @@ export const JOBS: Job[] = [
   todoNotifyJob,
   // 毎週日曜 UTC 18:00 (JST 月曜 03:00): Supabase スキーマ + 行カウント snapshot
   backupSupabaseJob,
+  // 5 分間隔: service_logs.context.server_id の出現を deploy_events に集約
+  deployEventsSyncJob,
   // 60 秒間隔: rezona / boundary metrics を polling し時系列保存
   metricsPollerJob,
   // 毎日 UTC 03:45: 古い service_metrics を削除
   metricsRetentionJob,
+  // 毎日 UTC 03:50: 古い deploy_events を削除
+  deployEventsRetentionJob,
 ];
 
 export {
@@ -47,6 +53,8 @@ export {
   airdropDryRunJob,
   todoNotifyJob,
   backupSupabaseJob,
+  deployEventsSyncJob,
   metricsPollerJob,
   metricsRetentionJob,
+  deployEventsRetentionJob,
 };

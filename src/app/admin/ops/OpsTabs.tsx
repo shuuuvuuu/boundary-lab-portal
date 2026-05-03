@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityClient } from "./ActivityClient";
+import { DeployEventsClient } from "./DeployEventsClient";
 import { JobsClient } from "./JobsClient";
 import { LogsOtelClient } from "./LogsOtelClient";
 import { MetricsClient } from "./MetricsClient";
@@ -22,6 +23,7 @@ type TabKey =
   | "users"
   | "uptime"
   | "jobs"
+  | "deploys"
   | "todos";
 
 const OTEL_TABS: Array<{ key: TabKey; label: string }> = [
@@ -36,6 +38,7 @@ const CORE_TABS: Array<{ key: TabKey; label: string }> = [
   { key: "users", label: "Users" },
   { key: "uptime", label: "Uptime" },
   { key: "jobs", label: "Jobs" },
+  { key: "deploys", label: "Deploys" },
   { key: "service-logs", label: "Logs (受信)" },
   { key: "todos", label: "TODOs" },
 ];
@@ -52,6 +55,7 @@ function normalizeTab(raw: string | null | undefined): TabKey | null {
   if (raw === "users") return "users";
   if (raw === "uptime") return "uptime";
   if (raw === "jobs") return "jobs";
+  if (raw === "deploys") return "deploys";
   if (raw === "todos") return "todos";
   return null;
 }
@@ -141,6 +145,7 @@ export function OpsTabs({
         <UptimeClient services={healthServices} defaultService={defaultHealthService} />
       )}
       {active === "jobs" && <JobsClient />}
+      {active === "deploys" && <DeployEventsClient />}
       {active === "todos" && <TodosClient />}
     </div>
   );
