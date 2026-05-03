@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CronJob, JobResult } from "@/lib/scheduler/types";
 
 type JsonObject = Record<string, unknown>;
@@ -61,7 +62,7 @@ function deployEventKey(service: string, serverId: string): string {
   return `${service}\u0000${serverId}`;
 }
 
-async function fetchWatermark(supabase: ReturnType<typeof createClient>): Promise<string> {
+async function fetchWatermark(supabase: SupabaseClient): Promise<string> {
   const { data, error } = await supabase
     .from("deploy_events")
     .select("last_seen_at")
@@ -76,7 +77,7 @@ async function fetchWatermark(supabase: ReturnType<typeof createClient>): Promis
 }
 
 async function fetchServiceLogsSince(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   sinceIso: string,
 ): Promise<ServiceLogRow[]> {
   const rows: ServiceLogRow[] = [];
@@ -150,7 +151,7 @@ function aggregateLogs(rows: ServiceLogRow[]): DeployEventGroup[] {
 }
 
 async function fetchExistingDeployEvents(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   groups: DeployEventGroup[],
 ): Promise<Map<string, DeployEventRow>> {
   const existing = new Map<string, DeployEventRow>();
