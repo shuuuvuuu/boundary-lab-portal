@@ -5,7 +5,20 @@ import { OpsTabs } from "./OpsTabs";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminOpsPage() {
+type AdminOpsPageProps = {
+  searchParams?: Promise<{
+    tab?: string | string[];
+  }>;
+};
+
+function firstSearchParam(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+export default async function AdminOpsPage({ searchParams }: AdminOpsPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const initialTab = firstSearchParam(resolvedSearchParams?.tab);
   const showSentryTabs = process.env.SENTRY_TABS_VISIBLE !== "false";
   const targets = parseTargets(process.env.HEALTH_CHECK_TARGETS);
   const httpServices = targets.map((t) => t.service);
@@ -29,6 +42,7 @@ export default function AdminOpsPage() {
       defaultHealthService={defaultService}
       showSentryTabs={showSentryTabs}
       showSentryServiceSelector={rezonaSentryConfigured}
+      initialTab={initialTab}
     />
   );
 }
