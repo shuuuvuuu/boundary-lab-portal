@@ -13,8 +13,14 @@ const PROTECTED_PREFIXES = [
 ];
 
 const CLOSED_MODE_BYPASS_PATHS = ["/coming-soon", "/login", "/api/healthz"];
-// /blog は誰でも閲覧可。/api/logs/ingest と /api/otel は外部サービスからの POST 受信用。
-const CLOSED_MODE_BYPASS_PREFIXES = ["/auth/", "/blog", "/api/logs/", "/api/otel/"];
+// /blog は誰でも閲覧可。/api/logs, /api/otel, capability ingest は外部/内部サービス受信用。
+const CLOSED_MODE_BYPASS_PREFIXES = [
+  "/auth/",
+  "/blog",
+  "/api/logs/",
+  "/api/otel/",
+  "/api/admin/capability/",
+];
 
 // GUEST_OPS_ENABLED=true の時、ログイン不要で通す path/prefix。
 // 読み取り専用の運用ダッシュボード用。
@@ -27,6 +33,7 @@ const GUEST_OPS_BYPASS_PREFIXES = [
   "/api/admin/jobs", // Phase A3: Jobs タブ (一覧/履歴は guest 可、run は内部で owner 判定)
   "/api/admin/logs", // Phase A3: 受信ログ一覧 (guest 可)
   "/api/admin/todos", // Phase A3: TODO 一覧 (guest 可、変更系は owner 判定)
+  "/api/admin/capability/", // Phase 3: CapabilityBar snapshot (guest 可、ingest は route 側で認可)
 ];
 
 const STATIC_ASSET_PATTERN =

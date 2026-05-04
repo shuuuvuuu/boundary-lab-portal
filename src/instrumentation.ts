@@ -17,14 +17,22 @@ export async function register(): Promise<void> {
       { startCertChecker },
       { startJobRunner },
       { JOBS },
+      { ingestPortalCapabilitySnapshot },
     ] = await Promise.all([
       import("@/lib/health-poller"),
       import("@/lib/cert-checker"),
       import("@/lib/scheduler/runner"),
       import("@/lib/jobs"),
+      import("@/lib/jobs/capability-collector"),
     ]);
     startHealthPoller();
     startCertChecker();
     startJobRunner(JOBS);
+    void ingestPortalCapabilitySnapshot().catch((err) => {
+      console.warn(
+        "[capability-collector] portal boot ingest failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
   }
 }

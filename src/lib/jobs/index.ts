@@ -10,6 +10,8 @@ import { deployEventsRetentionJob } from "./deploy-events-retention";
 import { deployEventsSyncJob } from "./deploy-events-sync";
 import { metricsPollerJob } from "./metrics-poller";
 import { metricsRetentionJob } from "./metrics-retention";
+import { capabilityCollectorJob } from "./capability-collector";
+import { livekitUnreachableAlertJob } from "./livekit-unreachable-alert";
 
 /**
  * Phase A3: ジョブ定義の集約。
@@ -39,6 +41,10 @@ export const JOBS: Job[] = [
   deployEventsSyncJob,
   // 60 秒間隔: rezona / boundary metrics を polling し時系列保存
   metricsPollerJob,
+  // 60 秒間隔: service_capability snapshot を収集
+  capabilityCollectorJob,
+  // 5 分間隔: LiveKit unreachable 連続発生を通知
+  livekitUnreachableAlertJob,
   // 毎日 UTC 03:45: 古い service_metrics を削除
   metricsRetentionJob,
   // 毎日 UTC 03:50: 古い deploy_events を削除
@@ -55,6 +61,8 @@ export {
   backupSupabaseJob,
   deployEventsSyncJob,
   metricsPollerJob,
+  capabilityCollectorJob,
+  livekitUnreachableAlertJob,
   metricsRetentionJob,
   deployEventsRetentionJob,
 };
