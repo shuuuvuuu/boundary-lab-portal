@@ -3,7 +3,7 @@ import { withOwnerOrGuest } from "@/lib/auth/with-auth";
 import { withRateLimit } from "@/lib/rate-limit/with-rate-limit";
 
 /**
- * GET /api/admin/metrics/server?service=boundary|rezona&type=server|rooms|host|users|all
+ * GET /api/admin/metrics/server?service=boundary|rezona&type=server|rooms|host|users|voice|all
  *
  * boundary-server / rezona-server の /api/admin/metrics をプロキシで呼ぶ。
  *
@@ -77,10 +77,11 @@ export const GET = withRateLimit(
       type === "rooms" ||
       type === "host" ||
       type === "users" ||
+      type === "voice" ||
       type === "all";
     if (!valid) {
       return NextResponse.json(
-        { error: "type must be server | rooms | host | users | all" },
+        { error: "type must be server | rooms | host | users | voice | all" },
         { status: 400 },
       );
     }

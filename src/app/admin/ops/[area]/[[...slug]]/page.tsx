@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { parseCertTargets } from "@/lib/cert-checker";
 import { parseTargets } from "@/lib/health-poller";
 import { ActivityClient } from "../../ActivityClient";
+import { AirdropEligibilityClient } from "../../AirdropEligibilityClient";
 import { CapabilityBar, type OpsService } from "../../CapabilityBar";
 import { DeployEventsClient } from "../../DeployEventsClient";
 import { JobsClient } from "../../JobsClient";
@@ -14,6 +15,7 @@ import { TodosClient } from "../../TodosClient";
 import { TracesOtelClient } from "../../TracesOtelClient";
 import { UptimeClient } from "../../UptimeClient";
 import { UsersClient } from "../../UsersClient";
+import { VoiceDebugClient } from "../../VoiceDebugClient";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +87,12 @@ function serviceLinks(service: OpsService): LinkItem[] {
     return [
       { key: "overview", label: "Overview", href: "/admin/ops/rezona" },
       { key: "metrics", label: "Metrics", href: "/admin/ops/rezona/metrics" },
+      { key: "voice-debug", label: "Voice Debug", href: "/admin/ops/rezona/voice-debug" },
+      {
+        key: "airdrop-eligibility",
+        label: "Airdrop Eligibility",
+        href: "/admin/ops/rezona/airdrop-eligibility",
+      },
       { key: "users", label: "Users", href: "/admin/ops/rezona/users" },
       { key: "logs", label: "Logs", href: "/admin/ops/rezona/logs" },
     ];
@@ -129,6 +137,8 @@ function ServicePage({ service, view }: { service: OpsService; view: string }) {
         </>
       )}
       {service === "rezona" && active === "metrics" && <MetricsClient service="rezona" />}
+      {service === "rezona" && active === "voice-debug" && <VoiceDebugClient />}
+      {service === "rezona" && active === "airdrop-eligibility" && <AirdropEligibilityClient />}
       {service === "rezona" && active === "users" && <UsersClient />}
       {service === "rezona" && active === "logs" && (
         <ServiceLogsClient initialSource="rezona-server" />
