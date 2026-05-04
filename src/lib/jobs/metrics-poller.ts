@@ -25,6 +25,42 @@ type ServiceMetricRow = {
 };
 
 const METRIC_TYPES: MetricType[] = ["server", "rooms", "users"];
+const UNAUTHORIZED_BACKOFF_THRESHOLD = 5;
+const UNAUTHORIZED_BACKOFF_MS = 10 * 60_000;
+
+type BackoffState = {
+  consecutiveUnauthorized: number;
+  nextAllowedAt: number;
+};
+
+const backoffByService = new Map<string, BackoffState>();
+
+function getBackoffState(service: string): BackoffState {
+  const current = backoffByService.get(service);
+  if (current) return current;
+  const next = { consecutiveUnauthorized: 0, nextAllowedAt: 0 };
+  backoffByService.set(service, next);
+  return next;
+}
+
+function backoffRemainingMs(service: string): number {
+  const state = getBackoffState(service);
+  return Math.max(0, state.nextAllowedAt - Date.now());
+}
+
+function recordMetricSuccess(service: string): void {
+  const state = getBackoffState(service);
+  state.consecutiveUnauthorized = 0;
+  state.nextAllowedAt = 0;
+}
+
+function recordUnauthorized(service: string): void {
+  const state = getBackoffState(service);
+  state.consecutiveUnauthorized += 1;
+  if (state.consecutiveUnauthorized >= UNAUTHORIZED_BACKOFF_THRESHOLD) {
+    state.nextAllowedAt = Date.now() + UNAUTHORIZED_BACKOFF_MS;
+  }
+}
 
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
@@ -142,11 +178,13 @@ async function fetchMetricRow(
   }
 
   if (!response.ok) {
+    if (response.status === 401) recordUnauthorized(target.service);
     console.warn(
       `[metrics-poller] ${target.service} type=${type} returned HTTP ${response.status}`,
     );
     return null;
   }
+  if (response.status === 200) recordMetricSuccess(target.service);
 
   let body: unknown;
   try {
@@ -194,7 +232,13 @@ export const metricsPollerJob: CronJob = {
 
     const { targets, skipped } = buildTargets();
     const rows: ServiceMetricRow[] = [];
+    let backoffSkipped = 0;
     for (const target of targets) {
+      const remainingMs = backoffRemainingMs(target.service);
+      if (remainingMs > 0) {
+        backoffSkipped += 1;
+        continue;
+      }
       for (const type of METRIC_TYPES) {
         const row = await fetchMetricRow(target, type);
         if (row) rows.push(row);
@@ -218,6 +262,7 @@ export const metricsPollerJob: CronJob = {
         targets: targets.map((target) => target.service),
         inserted,
         skipped,
+        backoffSkipped,
       },
     };
   },
