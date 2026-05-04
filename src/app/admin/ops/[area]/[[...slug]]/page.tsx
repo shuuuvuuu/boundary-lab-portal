@@ -4,12 +4,16 @@ import { parseCertTargets } from "@/lib/cert-checker";
 import { parseTargets } from "@/lib/health-poller";
 import { ActivityClient } from "../../ActivityClient";
 import { AirdropEligibilityClient } from "../../AirdropEligibilityClient";
+import { AudioStateClient } from "../../AudioStateClient";
 import { CapabilityBar, type OpsService } from "../../CapabilityBar";
 import { DeployEventsClient } from "../../DeployEventsClient";
+import { JoinFrequencyClient } from "../../JoinFrequencyClient";
+import { LifecycleClient } from "../../LifecycleClient";
 import { JobsClient } from "../../JobsClient";
 import { LogsOtelClient } from "../../LogsOtelClient";
 import { MetricsClient } from "../../MetricsClient";
 import { OpsNavigation } from "../../OpsNavigation";
+import { ReconnectSpikesClient } from "../../ReconnectSpikesClient";
 import { ServiceLogsClient } from "../../ServiceLogsClient";
 import { TodosClient } from "../../TodosClient";
 import { TracesOtelClient } from "../../TracesOtelClient";
@@ -25,8 +29,10 @@ type PageProps = {
 };
 
 type LinkItem = { key: string; label: string; href: string };
+type LifecycleServiceFilter = "all" | "rezona" | "portal" | "boundary";
+type ServiceArea = OpsService | "boundary";
 
-const SERVICE_AREAS = new Set(["rezona", "portal", "livekit"]);
+const SERVICE_AREAS = new Set(["rezona", "portal", "boundary", "livekit"]);
 
 function firstSearchParam(value: string | string[] | undefined): string | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -42,7 +48,7 @@ function healthServices(defaultFromQuery?: string | null) {
   const services = [...httpServices, ...certServices];
   const fallback = httpServices.includes("boundary")
     ? "boundary"
-    : httpServices[0] ?? certServices[0] ?? "rezona";
+    : (httpServices[0] ?? certServices[0] ?? "rezona");
   return {
     services,
     defaultService:
@@ -82,12 +88,27 @@ function Placeholder({ title, body }: { title: string; body: string }) {
   );
 }
 
-function serviceLinks(service: OpsService): LinkItem[] {
+function LifecycleStack({ service }: { service?: LifecycleServiceFilter }) {
+  return (
+    <div className="space-y-5">
+      <LifecycleClient fixedService={service} />
+      <ReconnectSpikesClient fixedService={service} />
+      <JoinFrequencyClient fixedService={service} />
+    </div>
+  );
+}
+
+function serviceLinks(service: ServiceArea): LinkItem[] {
+  if (service === "boundary") {
+    return [{ key: "lifecycle", label: "Lifecycle", href: "/admin/ops/boundary/lifecycle" }];
+  }
   if (service === "rezona") {
     return [
       { key: "overview", label: "Overview", href: "/admin/ops/rezona" },
       { key: "metrics", label: "Metrics", href: "/admin/ops/rezona/metrics" },
+      { key: "lifecycle", label: "Lifecycle", href: "/admin/ops/rezona/lifecycle" },
       { key: "voice-debug", label: "Voice Debug", href: "/admin/ops/rezona/voice-debug" },
+      { key: "audio-state", label: "Audio State", href: "/admin/ops/rezona/audio-state" },
       {
         key: "airdrop-eligibility",
         label: "Airdrop Eligibility",
@@ -101,6 +122,7 @@ function serviceLinks(service: OpsService): LinkItem[] {
     return [
       { key: "overview", label: "Overview", href: "/admin/ops/portal" },
       { key: "metrics", label: "Metrics", href: "/admin/ops/portal/metrics" },
+      { key: "lifecycle", label: "Lifecycle", href: "/admin/ops/portal/lifecycle" },
       { key: "logs", label: "Logs", href: "/admin/ops/portal/logs" },
       { key: "web-vitals", label: "Web Vitals", href: "/admin/ops/portal/web-vitals" },
     ];
@@ -112,7 +134,7 @@ function serviceLinks(service: OpsService): LinkItem[] {
   ];
 }
 
-function ServicePage({ service, view }: { service: OpsService; view: string }) {
+function ServicePage({ service, view }: { service: ServiceArea; view: string }) {
   const links = serviceLinks(service);
   const active = view || "overview";
 
@@ -121,8 +143,10 @@ function ServicePage({ service, view }: { service: OpsService; view: string }) {
   return (
     <div className="space-y-5">
       <OpsNavigation active={service} />
-      <CapabilityBar service={service} />
+      {service !== "boundary" && <CapabilityBar service={service} />}
       <SegmentLinks items={links} active={active} />
+
+      {service === "boundary" && active === "lifecycle" && <LifecycleStack service="boundary" />}
 
       {service === "rezona" && active === "overview" && (
         <>
@@ -137,7 +161,9 @@ function ServicePage({ service, view }: { service: OpsService; view: string }) {
         </>
       )}
       {service === "rezona" && active === "metrics" && <MetricsClient service="rezona" />}
+      {service === "rezona" && active === "lifecycle" && <LifecycleStack service="rezona" />}
       {service === "rezona" && active === "voice-debug" && <VoiceDebugClient />}
+      {service === "rezona" && active === "audio-state" && <AudioStateClient />}
       {service === "rezona" && active === "airdrop-eligibility" && <AirdropEligibilityClient />}
       {service === "rezona" && active === "users" && <UsersClient />}
       {service === "rezona" && active === "logs" && (
@@ -155,6 +181,7 @@ function ServicePage({ service, view }: { service: OpsService; view: string }) {
         </>
       )}
       {service === "portal" && active === "metrics" && <MetricsClient service="portal" />}
+      {service === "portal" && active === "lifecycle" && <LifecycleStack service="portal" />}
       {service === "portal" && active === "logs" && <ServiceLogsClient initialSource="portal" />}
       {service === "portal" && active === "web-vitals" && (
         <Placeholder
@@ -187,6 +214,7 @@ function ServicePage({ service, view }: { service: OpsService; view: string }) {
 
 const CROSS_LINKS: LinkItem[] = [
   { key: "activity", label: "Activity", href: "/admin/ops/cross/activity" },
+  { key: "lifecycle", label: "Lifecycle", href: "/admin/ops/cross/lifecycle" },
   { key: "logs", label: "Logs", href: "/admin/ops/cross/logs" },
   { key: "traces", label: "Traces", href: "/admin/ops/cross/traces" },
   { key: "jobs", label: "Jobs", href: "/admin/ops/cross/jobs" },
@@ -227,13 +255,12 @@ function CrossPage({
       <OpsNavigation active="cross" />
       <SegmentLinks items={CROSS_LINKS} active={view} />
       {view === "activity" && <ActivityClient showDeploys={subview === "deploys"} />}
+      {view === "lifecycle" && <LifecycleStack />}
       {view === "logs" && <LogsSourceTabs source={source} />}
       {view === "traces" && <TracesOtelClient />}
       {view === "jobs" && <JobsClient />}
       {view === "todos" && <TodosClient />}
-      {view === "uptime" && (
-        <UptimeClient services={services} defaultService={defaultService} />
-      )}
+      {view === "uptime" && <UptimeClient services={services} defaultService={defaultService} />}
       {view === "metrics" && <MetricsClient service="rezona" initialPanel="history" />}
     </div>
   );
@@ -242,10 +269,11 @@ function CrossPage({
 export default async function OpsAreaPage({ params, searchParams }: PageProps) {
   const { area, slug = [] } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const view = slug[0] ?? (area === "cross" ? "activity" : "overview");
+  const view =
+    slug[0] ?? (area === "cross" ? "activity" : area === "boundary" ? "lifecycle" : "overview");
 
   if (SERVICE_AREAS.has(area)) {
-    return <ServicePage service={area as OpsService} view={view} />;
+    return <ServicePage service={area as ServiceArea} view={view} />;
   }
   if (area === "cross") {
     return <CrossPage view={view} searchParams={resolvedSearchParams} />;
