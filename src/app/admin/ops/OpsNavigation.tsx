@@ -1,11 +1,12 @@
 import Link from "next/link";
 
-type OpsArea = "overview" | "rezona" | "portal" | "livekit" | "cross";
+type OpsArea = "overview" | "rezona" | "portal" | "boundary" | "livekit" | "cross";
 
 const ITEMS: Array<{ key: OpsArea; label: string; href: string }> = [
   { key: "overview", label: "All Services", href: "/admin/ops" },
   { key: "rezona", label: "rezona", href: "/admin/ops/rezona" },
   { key: "portal", label: "portal", href: "/admin/ops/portal" },
+  { key: "boundary", label: "boundary", href: "/admin/ops/boundary/lifecycle" },
   { key: "livekit", label: "LiveKit", href: "/admin/ops/livekit" },
   { key: "cross", label: "Cross Tools", href: "/admin/ops/cross" },
 ];
