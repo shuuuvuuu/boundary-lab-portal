@@ -13,9 +13,10 @@ import {
 
 import { TabDescription } from "./TabDescription";
 
-type MetricsServiceKey = "rezona";
+type MetricsServiceKey = "rezona" | "portal";
 type HistoryPeriod = "1h" | "24h" | "7d" | "30d";
 type MetricsMode = "live" | HistoryPeriod;
+type MetricsPanel = "host" | "process" | "rooms" | "history";
 type HistoryKind = "process" | "rooms" | "users";
 type JsonObject = Record<string, unknown>;
 
@@ -109,9 +110,24 @@ const REFRESH_INTERVAL_MAP: Record<Exclude<RefreshOption, "off">, number> = {
   "24h": 24 * 60 * 60_000,
 };
 
-const MODE_OPTIONS: MetricsMode[] = ["live", "1h", "24h", "7d", "30d"];
+const HISTORY_PERIOD_OPTIONS: HistoryPeriod[] = ["1h", "24h", "7d", "30d"];
+const PANEL_OPTIONS: Array<{ key: MetricsPanel; label: string }> = [
+  { key: "host", label: "Host" },
+  { key: "process", label: "Process" },
+  { key: "rooms", label: "Rooms" },
+  { key: "history", label: "履歴" },
+];
+const LIVE_SERVICE_MAP: Record<MetricsServiceKey, string> = {
+  rezona: "rezona",
+  portal: "boundary",
+};
 const HISTORY_SERVICE_MAP: Record<MetricsServiceKey, string> = {
   rezona: "rezona-server",
+  portal: "boundary-server",
+};
+const SERVICE_LABEL_MAP: Record<MetricsServiceKey, string> = {
+  rezona: "rezona-server",
+  portal: "portal",
 };
 
 function formatBytes(bytes: number): string {
@@ -274,19 +290,28 @@ async function fetchHistoryRows(
   return Array.isArray(json.rows) ? json.rows : [];
 }
 
-export function MetricsClient() {
+export function MetricsClient({
+  service: initialService = "rezona",
+  initialPanel = "host",
+}: {
+  service?: MetricsServiceKey;
+  initialPanel?: MetricsPanel;
+}) {
   const [state, setState] = useState<FetchState>({ kind: "idle", mode: "live" });
   const [refresh, setRefresh] = useState<RefreshOption>("5s");
   const [mode, setMode] = useState<MetricsMode>("live");
-  const [service] = useState<MetricsServiceKey>("rezona");
+  const [panel, setPanel] = useState<MetricsPanel>(initialPanel);
+  const [service] = useState<MetricsServiceKey>(initialService);
   const requestSeq = useRef(0);
+  const liveService = LIVE_SERVICE_MAP[service];
+  const serviceLabel = SERVICE_LABEL_MAP[service];
 
   const fetchAll = useCallback(async (): Promise<void> => {
     const seq = requestSeq.current + 1;
     requestSeq.current = seq;
     setState((prev) => (prev.kind === "live-ready" ? prev : { kind: "loading", mode: "live" }));
     try {
-      const res = await fetch(`/api/admin/metrics/server?service=${service}&type=all`, {
+      const res = await fetch(`/api/admin/metrics/server?service=${liveService}&type=all`, {
         cache: "no-store",
       });
       // 503 + configured: false は「未設定」として明示メッセージで扱う
@@ -297,7 +322,7 @@ export function MetricsClient() {
           setState({
             kind: "error",
             mode: "live",
-            message: `${service} は portal 側で未設定です（${body.error ?? "REZONA_INTERNAL_URL / REZONA_INTERNAL_SECRET を /etc/boundary/.env に追加してください"}）`,
+            message: `${serviceLabel} は portal 側で未設定です（${body.error ?? "internal metrics env を /etc/boundary/.env に追加してください"}）`,
           });
           return;
         }
@@ -331,7 +356,7 @@ export function MetricsClient() {
         message: err instanceof Error ? err.message : "unknown error",
       });
     }
-  }, [service]);
+  }, [liveService, serviceLabel]);
 
   const fetchHistory = useCallback(
     async (period: HistoryPeriod): Promise<void> => {
@@ -370,7 +395,7 @@ export function MetricsClient() {
   );
 
   useEffect(() => {
-    if (mode !== "live") return;
+    if (panel === "history") return;
     void fetchAll();
     if (refresh === "off") return;
     const intervalMs = REFRESH_INTERVAL_MAP[refresh];
@@ -378,14 +403,19 @@ export function MetricsClient() {
       void fetchAll();
     }, intervalMs);
     return () => clearInterval(t);
-  }, [fetchAll, mode, refresh]);
+  }, [fetchAll, panel, refresh]);
 
   useEffect(() => {
-    if (mode === "live") return;
-    void fetchHistory(mode);
-  }, [fetchHistory, mode]);
+    if (panel !== "history") return;
+    const period = mode === "live" ? "24h" : mode;
+    if (mode === "live") {
+      setMode(period);
+      return;
+    }
+    void fetchHistory(period);
+  }, [fetchHistory, mode, panel]);
 
-  const liveState = state.kind === "live-ready" && mode === "live" ? state : null;
+  const liveState = state.kind === "live-ready" && panel !== "history" ? state : null;
   const historyState = state.kind === "history-ready" && state.mode === mode ? state : null;
 
   const memoryChartData = useMemo(() => {
@@ -471,31 +501,51 @@ export function MetricsClient() {
     historyRoomsChartData.length > 0;
 
   const handleRefresh = (): void => {
-    if (mode === "live") {
+    if (panel !== "history") {
       void fetchAll();
     } else {
-      void fetchHistory(mode);
+      void fetchHistory(mode === "live" ? "24h" : mode);
     }
+  };
+
+  const handlePanelChange = (next: MetricsPanel): void => {
+    setPanel(next);
+    setMode(next === "history" ? (mode === "live" ? "24h" : mode) : "live");
   };
 
   return (
     <div className="space-y-4">
       <TabDescription>
-        rezona-server プロセスの健全性を可視化します。
+        {serviceLabel} の健全性を可視化します。
         <br />
-        ライブモードでは Droplet host、現在値カード、直近 60 秒の sample
-        グラフ、Rooms テーブルを表示します。
+        Host / Process / Rooms はライブ値、履歴は service_metrics に保存された
+        process / rooms / users の時系列を表示します。
         <br />
-        期間モードでは service_metrics に保存された履歴から process / rooms /
-        users を取得し、メモリ、CPU、event loop lag、接続数の推移を表示します。
+        service は URL 階層で切り替え、既存 API route は変更せずに流用します。
       </TabDescription>
 
       {/* 制御バー */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span>更新間隔:</span>
+        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
+          {PANEL_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => handlePanelChange(opt.key)}
+              className={`rounded px-2 py-1 transition ${
+                panel === opt.key
+                  ? "bg-slate-700 text-slate-100"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {panel !== "history" && <span>更新間隔:</span>}
         <div
           className={`flex rounded border border-slate-700 bg-slate-800 p-0.5 ${
-            mode !== "live" ? "opacity-50" : ""
+            panel === "history" ? "hidden" : ""
           }`}
         >
           {(["5s", "60s", "1h", "24h", "off"] as const).map((opt) => (
@@ -503,7 +553,7 @@ export function MetricsClient() {
               key={opt}
               type="button"
               onClick={() => setRefresh(opt)}
-              disabled={mode !== "live"}
+              disabled={panel === "history"}
               className={`rounded px-2 py-1 transition disabled:cursor-not-allowed ${
                 refresh === opt
                   ? "bg-slate-700 text-slate-100"
@@ -525,9 +575,10 @@ export function MetricsClient() {
             </button>
           ))}
         </div>
-        <span>モード:</span>
-        <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
-          {MODE_OPTIONS.map((opt) => (
+        {panel === "history" && <span>期間:</span>}
+        {panel === "history" && (
+          <div className="flex rounded border border-slate-700 bg-slate-800 p-0.5">
+          {HISTORY_PERIOD_OPTIONS.map((opt) => (
             <button
               key={opt}
               type="button"
@@ -538,10 +589,11 @@ export function MetricsClient() {
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              {opt === "live" ? "ライブ" : opt}
+              {opt}
             </button>
           ))}
-        </div>
+          </div>
+        )}
         <button
           type="button"
           onClick={handleRefresh}
@@ -550,7 +602,7 @@ export function MetricsClient() {
         >
           {isLoading ? "読み込み中..." : "再取得"}
         </button>
-        {server && (
+        {panel !== "history" && server && (
           <span className="ml-auto">
             uptime: <span className="text-slate-200">{formatUptime(server.uptime_sec)}</span>
           </span>
@@ -563,13 +615,13 @@ export function MetricsClient() {
         </p>
       )}
 
-      {mode !== "live" && isLoading && (
+      {panel === "history" && isLoading && (
         <p className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-6 text-sm text-slate-400">
           履歴データを読み込み中...
         </p>
       )}
 
-      {mode !== "live" && historyState && (
+      {panel === "history" && historyState && (
         <section className="space-y-4">
           {!historyHasData && (
             <p className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-6 text-sm text-slate-400">
@@ -624,15 +676,14 @@ export function MetricsClient() {
       )}
 
       {/* Host (Droplet) 全体 */}
-      {host && (
+      {panel === "host" && host && (
         <section className="rounded-lg border border-slate-800 bg-slate-900/40">
           <header className="border-b border-slate-800 px-4 py-2">
             <h3 className="text-sm font-medium text-slate-200">
               Droplet host (全コンテナ合算)
             </h3>
             <p className="mt-0.5 text-[11px] text-slate-500">
-              rezona-server / portal / livekit / caddy / app / etc. 全部の合算。
-              rezona-server プロセス単独の値は下のセクションで確認。
+              service host 全体の合算。プロセス単独の値は Process で確認。
             </p>
           </header>
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -737,11 +788,11 @@ export function MetricsClient() {
       )}
 
       {/* rezona-server プロセス単独 */}
-      {mode === "live" && (
+      {panel === "process" && (
         <section className="rounded-lg border border-slate-800 bg-slate-900/40">
           <header className="border-b border-slate-800 px-4 py-2">
             <h3 className="text-sm font-medium text-slate-200">
-              rezona-server プロセス単独
+              {serviceLabel} プロセス単独
             </h3>
             <p className="mt-0.5 text-[11px] text-slate-500">
               host 全体ではなく、Node.js プロセスの内訳。直近 60 秒の時系列付き。
@@ -805,7 +856,7 @@ export function MetricsClient() {
       )}
 
       {/* Room dashboard */}
-      {rooms && (
+      {panel === "rooms" && rooms && (
         <section className="rounded-lg border border-slate-800 bg-slate-900/40">
           <header className="border-b border-slate-800 px-4 py-3">
             <h3 className="text-sm font-medium">Rooms ({rooms.rooms.length})</h3>

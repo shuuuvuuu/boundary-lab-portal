@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { DeployEventsClient } from "./DeployEventsClient";
 import { TabDescription } from "./TabDescription";
 import { TimeRangeSelector, type TimeRange } from "./TimeRangeSelector";
 
@@ -228,7 +229,7 @@ function describeEvent(row: ActivityRow): string | null {
   return null;
 }
 
-export function ActivityClient() {
+export function ActivityClient({ showDeploys = false }: { showDeploys?: boolean }) {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [errorRateState, setErrorRateState] = useState<ErrorRateFetchState>({
     kind: "idle",
@@ -326,6 +327,8 @@ export function ActivityClient() {
         (server_boot / server_stop_graceful) もここに記録されるため、「いつ落ちたか」
         「正常終了だったか」を時系列で追跡できます。
       </TabDescription>
+
+      {showDeploys && <DeployEventsClient embedded />}
 
       {/* フィルタバー */}
       <div className="flex flex-wrap items-center gap-2">

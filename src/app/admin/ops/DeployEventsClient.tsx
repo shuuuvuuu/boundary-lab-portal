@@ -55,7 +55,7 @@ function formatDuration(seconds: number): string {
   return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
 }
 
-export function DeployEventsClient() {
+export function DeployEventsClient({ embedded = false }: { embedded?: boolean }) {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
   const [service, setService] = useState(DEFAULT_SERVICE);
   const [offset, setOffset] = useState(0);
@@ -102,15 +102,19 @@ export function DeployEventsClient() {
 
   return (
     <div className="space-y-4">
-      <TabDescription>
-        rezona-server の warn 以上ログに含まれる
-        <code className="mx-1 rounded bg-slate-800 px-1">context.server_id</code>
-        の初出を deploy/restart として時系列表示します。
-      </TabDescription>
+      {!embedded && (
+        <TabDescription>
+          rezona-server の warn 以上ログに含まれる
+          <code className="mx-1 rounded bg-slate-800 px-1">context.server_id</code>
+          の初出を deploy/restart として時系列表示します。
+        </TabDescription>
+      )}
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <header className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-4 py-3">
-          <h2 className="font-medium">Deploys</h2>
+          <h2 className="font-medium">
+            {embedded ? "rezona deploy events" : "Deploys"}
+          </h2>
           <div className="flex items-center gap-2 text-xs">
             <label className="text-slate-400">service</label>
             <select

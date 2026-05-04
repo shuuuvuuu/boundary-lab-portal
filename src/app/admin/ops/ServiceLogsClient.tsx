@@ -37,9 +37,9 @@ function formatRelative(iso: string): string {
   return `${Math.floor(hr / 24)}d ago`;
 }
 
-export function ServiceLogsClient() {
+export function ServiceLogsClient({ initialSource = "" }: { initialSource?: string }) {
   const [state, setState] = useState<FetchState>({ kind: "idle" });
-  const [source, setSource] = useState<string>("");
+  const [source, setSource] = useState<string>(initialSource);
   const [level, setLevel] = useState<string>("all");
   const [period, setPeriod] = useState<TimeRange>("24h");
   const [deleting, setDeleting] = useState<false | "24h" | "7d" | "all">(false);
